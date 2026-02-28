@@ -1389,6 +1389,12 @@ async def startup():
     await db.clients.create_index([("user_id", 1)], background=True)
     await db.availability_rules.create_index([("user_id", 1)], background=True)
     await db.user_sessions.create_index("session_token", background=True)
+    await db.quick_links.create_index("code", unique=True, background=True, sparse=True)
+    await db.quick_links.create_index([("user_id", 1)], background=True)
+    await db.turbo_offers.create_index([("user_id", 1)], background=True)
+    await db.turbo_offers.create_index([("slug", 1), ("status", 1)], background=True)
+    await db.favorites.create_index([("client_user_id", 1)], background=True)
+    await db.users.create_index([("role", 1), ("city", 1)], background=True)
     logger.info("Click Agenda API started successfully")
 
 @app.on_event("shutdown")
