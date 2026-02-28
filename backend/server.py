@@ -37,6 +37,7 @@ class UserRegister(BaseModel):
     password: str
     business_name: Optional[str] = ""
     slug: Optional[str] = ""
+    role: Optional[str] = "professional"  # "professional" or "client"
 
 class UserLogin(BaseModel):
     email: str
@@ -78,6 +79,21 @@ class ProfileUpdate(BaseModel):
     picture: Optional[str] = None
     min_advance_hours: Optional[int] = None
     cancellation_policy_hours: Optional[int] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+
+class QuickLinkCreate(BaseModel):
+    service_id: str
+    discount_percent: int = 10
+    expires_hours: int = 24
+    max_uses: int = 5
+
+class TurboOfferCreate(BaseModel):
+    service_id: str
+    date: str
+    start_time: str
+    discount_percent: int = 20
+    expires_hours: int = 24
 
 
 # ==================== AUTH HELPERS ====================
