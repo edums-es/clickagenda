@@ -303,13 +303,13 @@ async def register(data: UserRegister, response: Response):
     if default_rules:
         await db.availability_rules.insert_many(default_rules)
 
-    await db.breaks.insert_one({
-        "break_id": f"brk_{uuid.uuid4().hex[:8]}",
-        "user_id": user_id,
-        "day_of_week": -1,
-        "start_time": "12:00",
-        "end_time": "13:00"
-    })
+        await db.breaks.insert_one({
+            "break_id": f"brk_{uuid.uuid4().hex[:8]}",
+            "user_id": user_id,
+            "day_of_week": -1,
+            "start_time": "12:00",
+            "end_time": "13:00"
+        })
 
     session_token = await create_session(user_id, response)
     user_data = {k: v for k, v in user.items() if k not in ("password_hash", "_id")}
