@@ -1,0 +1,205 @@
+{
+  "project_name": "Click Agenda",
+  "design_philosophy": {
+    "identity": "The Soft Utility",
+    "core_values": [
+      "Trust over Trend",
+      "Clarity over Clutter",
+      "Speed over Decoration",
+      "Warmth over Sterility"
+    ],
+    "vibe": "A modern, hygienic, and efficient workspace that feels like a premium notebook."
+  },
+  "typography": {
+    "font_family": {
+      "headings": "Outfit, sans-serif",
+      "body": "Plus Jakarta Sans, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl md:text-5xl font-bold tracking-tight",
+      "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+      "h3": "text-2xl font-semibold",
+      "body_lg": "text-lg leading-relaxed",
+      "body_base": "text-base leading-relaxed",
+      "caption": "text-sm text-muted-foreground",
+      "label": "text-xs font-bold uppercase tracking-wider text-muted-foreground"
+    },
+    "imports": [
+      "@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');"
+    ]
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "DEFAULT": "#0F766E", 
+        "foreground": "#FFFFFF",
+        "hover": "#115E59",
+        "description": "Deep Teal/Emerald. Use for primary buttons, active states, and brand trust."
+      },
+      "secondary": {
+        "DEFAULT": "#F43F5E",
+        "foreground": "#FFFFFF",
+        "hover": "#E11D48",
+        "description": "Vibrant Rose/Coral. Use for high-priority actions (Book Now), alerts, or heart icons."
+      },
+      "background": {
+        "DEFAULT": "#FAFAF9",
+        "paper": "#FFFFFF",
+        "dark": "#0C0A09",
+        "description": "Warm Stone/Paper white. Avoids clinical sterility."
+      },
+      "surface": {
+        "DEFAULT": "#FFFFFF",
+        "muted": "#F5F5F4",
+        "description": "Clean white cards with subtle borders."
+      },
+      "text": {
+        "main": "#0F172A",
+        "muted": "#64748B",
+        "inverted": "#FFFFFF"
+      },
+      "border": {
+        "DEFAULT": "#E7E5E4",
+        "active": "#0F766E"
+      },
+      "status": {
+        "success": "#10B981",
+        "warning": "#F59E0B",
+        "error": "#EF4444",
+        "info": "#3B82F6"
+      }
+    },
+    "gradients": {
+      "hero": "bg-gradient-to-br from-teal-50 to-stone-100",
+      "card_hover": "hover:bg-gradient-to-br hover:from-white hover:to-stone-50"
+    }
+  },
+  "layout_system": {
+    "spacing_scale": {
+      "section_padding": "py-16 md:py-24",
+      "container_padding": "px-4 md:px-8",
+      "card_padding": "p-6 md:p-8",
+      "element_gap": "gap-4 md:gap-6"
+    },
+    "grid_modes": {
+      "dashboard": {
+        "type": "Mode B (High Density)",
+        "classes": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4",
+        "rule": "Use full height for all children. No jagged bottoms."
+      },
+      "public_page": {
+        "type": "Mode A (The Tetris)",
+        "classes": "grid grid-cols-1 md:grid-cols-12 gap-8",
+        "rule": "Hero spans full width. Service list floats."
+      }
+    },
+    "containers": {
+      "main": "max-w-7xl mx-auto",
+      "narrow": "max-w-3xl mx-auto"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 rounded-lg font-medium transition-all duration-200 active:scale-95 shadow-sm hover:shadow-md",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/90 h-10 px-4 py-2 rounded-lg font-medium transition-all duration-200 active:scale-95",
+      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 rounded-lg font-medium transition-colors",
+      "ghost": "hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 rounded-lg font-medium transition-colors",
+      "link": "text-primary underline-offset-4 hover:underline"
+    },
+    "cards": {
+      "base": "rounded-xl border border-border bg-card text-card-foreground shadow-sm",
+      "hoverable": "rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/20 hover:-translate-y-1",
+      "interactive": "cursor-pointer active:scale-[0.98]"
+    },
+    "inputs": {
+      "base": "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    },
+    "badges": {
+      "base": "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+      "confirmed": "border-transparent bg-teal-100 text-teal-800",
+      "pending": "border-transparent bg-amber-100 text-amber-800",
+      "cancelled": "border-transparent bg-rose-100 text-rose-800"
+    }
+  },
+  "visual_enhancers": {
+    "shadows": {
+      "soft": "shadow-[0_2px_8px_rgba(0,0,0,0.04)]",
+      "medium": "shadow-[0_4px_16px_rgba(0,0,0,0.08)]",
+      "float": "shadow-[0_12px_24px_rgba(0,0,0,0.12)]"
+    },
+    "borders": {
+      "subtle": "border border-stone-200",
+      "highlight": "border-l-4 border-l-primary"
+    },
+    "glassmorphism": {
+      "nav": "bg-white/80 backdrop-blur-md border-b border-stone-200/50 supports-[backdrop-filter]:bg-white/60",
+      "overlay": "bg-black/20 backdrop-blur-sm"
+    }
+  },
+  "image_assets": {
+    "hero_professional": {
+      "url": "https://images.unsplash.com/photo-1559410117-4c12d656c06f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHw0fHxicmF6aWxpYW4lMjBidXNpbmVzcyUyMHdvbWFuJTIwc21pbGluZyUyMG9mZmljZXxlbnwwfHx8fDE3NzIzMTE2Mzh8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Professional Brazilian Woman Smiling",
+      "usage": "Landing page hero or default profile avatar"
+    },
+    "hero_barber": {
+      "url": "https://images.unsplash.com/photo-1543697506-6729425f7265?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2ODh8MHwxfHNlYXJjaHw0fHxicmF6aWxpYW4lMjBiYXJiZXIlMjBzbWlsaW5nJTIwc2Fsb258ZW58MHx8fHwxNzcyMzExNjI2fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Barber cutting hair",
+      "usage": "Service category example (Barbershop)"
+    },
+    "service_massage": {
+      "url": "https://images.unsplash.com/photo-1611073615830-9f76902c10fe?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODd8MHwxfHNlYXJjaHwyfHxzcGElMjBtYXNzYWdlJTIwdGhlcmFwaXN0JTIwaGFuZHN8ZW58MHx8fHwxNzcyMzExNjM5fDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Massage Therapy Hands",
+      "usage": "Service category example (Therapy/Spa)"
+    },
+    "service_clinic": {
+      "url": "https://images.pexels.com/photos/10521230/pexels-photo-10521230.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "alt": "Modern Clinic Interior",
+      "usage": "Location background or Clinic category"
+    }
+  },
+  "motion_guidelines": {
+    "page_transition": {
+      "initial": { "opacity": 0, "y": 20 },
+      "animate": { "opacity": 1, "y": 0 },
+      "exit": { "opacity": 0, "y": -20 },
+      "transition": { "duration": 0.3, "ease": "easeOut" }
+    },
+    "hover_lift": "transition-transform duration-200 hover:-translate-y-1",
+    "stagger_children": {
+      "animate": "visible",
+      "initial": "hidden",
+      "variants": {
+        "hidden": { "opacity": 0 },
+        "visible": { "opacity": 1, "transition": { "staggerChildren": 0.1 } }
+      }
+    }
+  },
+  "accessibility_checklist": [
+    "Ensure contrast ratio of at least 4.5:1 for normal text.",
+    "Use distinct hover states (change color, not just opacity).",
+    "All form inputs must have associated labels.",
+    "Interactive elements must have a minimum touch target of 44x44px.",
+    "Use semantic HTML (nav, main, section, article).",
+    "Provide alt text for all informative images."
+  ],
+  "instructions_to_main_agent": [
+    "Use the 'Soft Utility' color palette. Do NOT revert to default blue/purple.",
+    "Implement the 'Outfit' font for headings immediately.",
+    "For the Dashboard, use the 'Mode B' high-density grid pattern.",
+    "For the Public Page, use the 'Mode A' asymmetrical layout to make it feel like a personal website, not a form.",
+    "Use 'sonner' for all toast notifications.",
+    "Ensure the date picker is large and touch-friendly on mobile.",
+    "The 'Book Now' button must be sticky at the bottom on mobile views.",
+    "Use the provided image URLs for placeholders. Do not leave empty gray boxes.",
+    "Add 'data-testid' to all interactive elements."
+  ],
+  "universal_guidelines": [
+    "Do not use generic AI emojis.",
+    "Avoid 'transition: all'. Animate specific properties.",
+    "Do not center align the app container globally.",
+    "Create depth through layered shadows.",
+    "Use 'lucide-react' for icons."
+  ]
+}
