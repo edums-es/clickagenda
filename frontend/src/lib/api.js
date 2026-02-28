@@ -14,10 +14,14 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      const isAuthRoute = window.location.pathname === "/login" || 
-                          window.location.pathname === "/register" ||
-                          window.location.pathname === "/";
-      if (!isAuthRoute && !window.location.hash?.includes("session_id=")) {
+      const path = window.location.pathname;
+      const isPublicRoute =
+        path === "/" ||
+        path === "/login" ||
+        path === "/register" ||
+        path.startsWith("/p/") ||
+        path.startsWith("/agendamento/");
+      if (!isPublicRoute && !window.location.hash?.includes("session_id=")) {
         window.location.href = "/login";
       }
     }
