@@ -946,6 +946,422 @@ async def manual_whatsapp_send(request: Request, user=Depends(get_current_user))
     return {"message": "Mensagem enviada (mock)", "message_id": msg_doc["message_id"]}
 
 
+# ==================== MARKETPLACE ROUTES ====================
+
+@api_router.get("/marketplace")
+async def marketplace_search(
+    city: Optional[str] = None,
+    state: Optional[str] = None,
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    page: int = 1,
+    limit: int = 20
+):
+    query = {"role": "professional"}
+    if city:
+        query["city"] = {"$regex": city, "$options": "i"}
+    if state:
+        query["state"] = {"$regex": state, "$options": "i"}
+    if category:
+        query["business_type"] = {"$regex": category, "$options": "i"}
+    if search:
+        query["$or"] = [
+            {"name": {"$regex": search, "$options": "i"}},
+            {"business_name": {"$regex": search, "$options": "i"}},
+            {"business_type": {"$regex": search, "$options": "i"}}
+        ]
+
+    skip = (page - 1) * limit
+    total = await db.users.count_documents(query)
+    professionals = await db.users.find(
+        query,
+        {"_id": 0, "password_hash": 0, "onboarding_completed": 0}
+    ).skip(skip).limit(limit).to_list(limit)
+
+    # Get service counts for each professional
+    results = []
+    for pro in professionals:
+        svc_count = await db.services.count_documents({"user_id": pro["user_id"], "active": True})
+        pro_data = {k: v for k, v in pro.items() if k != "password_hash"}
+        pro_data["service_count"] = svc_count
+        # Get active turbo offers count
+        offer_count = await db.turbo_offers.count_documents({
+            "user_id": pro["user_id"], "status": "active",
+            "expires_at": {"$gt": datetime.now(timezone.utc).isoformat()}
+        })
+        pro_data["has_offers"] = offer_count > 0
+        results.append(pro_data)
+
+    return {"professionals": results, "total": total, "page": page, "pages": (total + limit - 1) // limit}
+
+@api_router.get("/marketplace/categories")
+async def marketplace_categories():
+    pipeline = [
+        {"$match": {"role": "professional", "business_type": {"$ne": ""}}},
+        {"$group": {"_id": "$business_type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    cats = await db.users.aggregate(pipeline).to_list(50)
+    return [{"name": c["_id"], "count": c["count"]} for c in cats if c["_id"]]
+
+@api_router.get("/marketplace/cities")
+async def marketplace_cities():
+    pipeline = [
+        {"$match": {"role": "professional", "city": {"$ne": ""}}},
+        {"$group": {"_id": {"city": "$city", "state": "$state"}, "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}
+    ]
+    cities = await db.users.aggregate(pipeline).to_list(100)
+    return [{"city": c["_id"]["city"], "state": c["_id"]["state"], "count": c["count"]} for c in cities if c["_id"].get("city")]
+
+
+# ==================== CLIENT PANEL ROUTES ====================
+
+@api_router.get("/client/dashboard")
+async def client_dashboard(user=Depends(get_current_user)):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    phone = user.get("phone", "")
+    email = user.get("email", "")
+
+    query_conditions = []
+    if phone:
+        query_conditions.append({"client_phone": phone})
+    if email:
+        query_conditions.append({"client_email": email})
+
+    if not query_conditions:
+        return {"upcoming": [], "recent": [], "favorites_count": 0, "total_appointments": 0}
+
+    match_query = {"$or": query_conditions}
+
+    upcoming = await db.appointments.find(
+        {**match_query, "date": {"$gte": today}, "status": {"$nin": ["cancelled", "no_show"]}},
+        {"_id": 0}
+    ).sort([("date", 1), ("start_time", 1)]).to_list(10)
+
+    # Enrich with professional info
+    for apt in upcoming:
+        pro = await db.users.find_one({"user_id": apt["user_id"]}, {"_id": 0, "password_hash": 0})
+        apt["professional"] = {"name": pro.get("name", ""), "business_name": pro.get("business_name", ""), "slug": pro.get("slug", "")} if pro else {}
+
+    recent = await db.appointments.find(
+        {**match_query, "date": {"$lt": today}},
+        {"_id": 0}
+    ).sort([("date", -1), ("start_time", -1)]).to_list(10)
+    for apt in recent:
+        pro = await db.users.find_one({"user_id": apt["user_id"]}, {"_id": 0, "password_hash": 0})
+        apt["professional"] = {"name": pro.get("name", ""), "business_name": pro.get("business_name", ""), "slug": pro.get("slug", "")} if pro else {}
+
+    fav_count = await db.favorites.count_documents({"client_user_id": user["user_id"]})
+    total = await db.appointments.count_documents(match_query)
+
+    return {"upcoming": upcoming, "recent": recent, "favorites_count": fav_count, "total_appointments": total}
+
+@api_router.get("/client/appointments")
+async def client_appointments(user=Depends(get_current_user), status: Optional[str] = None):
+    phone = user.get("phone", "")
+    email = user.get("email", "")
+    query_conditions = []
+    if phone:
+        query_conditions.append({"client_phone": phone})
+    if email:
+        query_conditions.append({"client_email": email})
+    if not query_conditions:
+        return []
+
+    query = {"$or": query_conditions}
+    if status:
+        query["status"] = status
+
+    appointments = await db.appointments.find(query, {"_id": 0}).sort([("date", -1), ("start_time", -1)]).to_list(500)
+    for apt in appointments:
+        pro = await db.users.find_one({"user_id": apt["user_id"]}, {"_id": 0, "password_hash": 0})
+        apt["professional"] = {"name": pro.get("name", ""), "business_name": pro.get("business_name", ""), "slug": pro.get("slug", "")} if pro else {}
+    return appointments
+
+@api_router.get("/client/favorites")
+async def client_favorites(user=Depends(get_current_user)):
+    favs = await db.favorites.find({"client_user_id": user["user_id"]}, {"_id": 0}).to_list(100)
+    results = []
+    for fav in favs:
+        pro = await db.users.find_one({"user_id": fav["professional_user_id"]}, {"_id": 0, "password_hash": 0})
+        if pro:
+            svc_count = await db.services.count_documents({"user_id": pro["user_id"], "active": True})
+            pro_data = {k: v for k, v in pro.items() if k != "password_hash"}
+            pro_data["service_count"] = svc_count
+            results.append(pro_data)
+    return results
+
+@api_router.post("/client/favorites/{professional_id}")
+async def add_favorite(professional_id: str, user=Depends(get_current_user)):
+    existing = await db.favorites.find_one(
+        {"client_user_id": user["user_id"], "professional_user_id": professional_id}, {"_id": 0}
+    )
+    if existing:
+        return {"message": "Ja esta nos favoritos"}
+    await db.favorites.insert_one({
+        "favorite_id": f"fav_{uuid.uuid4().hex[:8]}",
+        "client_user_id": user["user_id"],
+        "professional_user_id": professional_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    return {"message": "Adicionado aos favoritos"}
+
+@api_router.delete("/client/favorites/{professional_id}")
+async def remove_favorite(professional_id: str, user=Depends(get_current_user)):
+    await db.favorites.delete_one(
+        {"client_user_id": user["user_id"], "professional_user_id": professional_id}
+    )
+    return {"message": "Removido dos favoritos"}
+
+
+# ==================== QUICK LINKS ROUTES ====================
+
+@api_router.get("/quick-links")
+async def list_quick_links(user=Depends(get_current_user)):
+    links = await db.quick_links.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for link in links:
+        svc = await db.services.find_one({"service_id": link["service_id"]}, {"_id": 0})
+        link["service_name"] = svc["name"] if svc else "Servico removido"
+        link["service_price"] = svc.get("price", 0) if svc else 0
+    return links
+
+@api_router.post("/quick-links")
+async def create_quick_link(data: QuickLinkCreate, user=Depends(get_current_user)):
+    svc = await db.services.find_one({"service_id": data.service_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not svc:
+        raise HTTPException(404, "Servico nao encontrado")
+
+    code = secrets.token_urlsafe(8)
+    link = {
+        "link_id": f"ql_{uuid.uuid4().hex[:8]}",
+        "user_id": user["user_id"],
+        "slug": user.get("slug", ""),
+        "service_id": data.service_id,
+        "code": code,
+        "discount_percent": min(data.discount_percent, 100),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(hours=data.expires_hours)).isoformat(),
+        "max_uses": data.max_uses,
+        "current_uses": 0,
+        "active": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.quick_links.insert_one(link)
+    result = await db.quick_links.find_one({"link_id": link["link_id"]}, {"_id": 0})
+    result["service_name"] = svc["name"]
+    result["service_price"] = svc.get("price", 0)
+    return result
+
+@api_router.delete("/quick-links/{link_id}")
+async def delete_quick_link(link_id: str, user=Depends(get_current_user)):
+    await db.quick_links.delete_one({"link_id": link_id, "user_id": user["user_id"]})
+    return {"message": "Link removido"}
+
+@api_router.get("/ql/{code}")
+async def get_quick_link_public(code: str):
+    link = await db.quick_links.find_one({"code": code, "active": True}, {"_id": 0})
+    if not link:
+        raise HTTPException(404, "Link nao encontrado ou expirado")
+
+    if link["expires_at"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(410, "Este link expirou")
+    if link["current_uses"] >= link["max_uses"]:
+        raise HTTPException(410, "Este link ja atingiu o limite de usos")
+
+    pro = await db.users.find_one({"user_id": link["user_id"]}, {"_id": 0, "password_hash": 0})
+    svc = await db.services.find_one({"service_id": link["service_id"]}, {"_id": 0})
+
+    original_price = svc.get("price", 0) if svc else 0
+    discount_price = original_price * (1 - link["discount_percent"] / 100)
+
+    return {
+        "link": link,
+        "professional": {
+            "name": pro.get("name", ""), "business_name": pro.get("business_name", ""),
+            "slug": pro.get("slug", ""), "picture": pro.get("picture", ""),
+            "address": pro.get("address", "")
+        } if pro else {},
+        "service": svc,
+        "original_price": original_price,
+        "discount_price": round(discount_price, 2)
+    }
+
+@api_router.post("/ql/{code}/book")
+async def book_via_quick_link(code: str, data: AppointmentCreate):
+    link = await db.quick_links.find_one({"code": code, "active": True}, {"_id": 0})
+    if not link:
+        raise HTTPException(404, "Link nao encontrado")
+    if link["expires_at"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(410, "Este link expirou")
+    if link["current_uses"] >= link["max_uses"]:
+        raise HTTPException(410, "Limite de usos atingido")
+
+    slug = link.get("slug", "")
+    user = await db.users.find_one({"user_id": link["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(404, "Profissional nao encontrado")
+
+    svc = await db.services.find_one({"service_id": link["service_id"]}, {"_id": 0})
+    if not svc:
+        raise HTTPException(404, "Servico nao encontrado")
+
+    start_mins = time_to_minutes(data.start_time)
+    end_mins = start_mins + svc["duration_minutes"]
+    end_time = minutes_to_time(end_mins)
+    buffer = svc.get("buffer_minutes", 0)
+
+    existing = await db.appointments.find(
+        {"user_id": user["user_id"], "date": data.date, "status": {"$nin": ["cancelled", "no_show"]}}, {"_id": 0}
+    ).to_list(1000)
+    for apt in existing:
+        apt_s = time_to_minutes(apt["start_time"])
+        apt_e = time_to_minutes(apt["end_time"])
+        if start_mins < (apt_e + buffer) and end_mins > (apt_s - buffer):
+            raise HTTPException(409, "Horario ja reservado")
+
+    discount_price = svc.get("price", 0) * (1 - link["discount_percent"] / 100)
+    token = secrets.token_urlsafe(32)
+    apt_doc = {
+        "appointment_id": f"apt_{uuid.uuid4().hex[:8]}",
+        "user_id": user["user_id"],
+        "service_id": link["service_id"],
+        "service_name": svc["name"],
+        "service_price": round(discount_price, 2),
+        "client_name": data.client_name,
+        "client_phone": data.client_phone,
+        "client_email": data.client_email or "",
+        "date": data.date,
+        "start_time": data.start_time,
+        "end_time": end_time,
+        "status": "scheduled",
+        "notes": data.notes or f"Via link rapido (desconto {link['discount_percent']}%)",
+        "token": token,
+        "quick_link_code": code,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.appointments.insert_one(apt_doc)
+    await db.quick_links.update_one({"code": code}, {"$inc": {"current_uses": 1}})
+    await mock_send_whatsapp(user["user_id"], apt_doc)
+
+    result = await db.appointments.find_one({"appointment_id": apt_doc["appointment_id"]}, {"_id": 0})
+    return result
+
+
+# ==================== TURBO OFFERS ROUTES ====================
+
+@api_router.get("/turbo-offers")
+async def list_turbo_offers(user=Depends(get_current_user)):
+    offers = await db.turbo_offers.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return offers
+
+@api_router.post("/turbo-offers")
+async def create_turbo_offer(data: TurboOfferCreate, user=Depends(get_current_user)):
+    svc = await db.services.find_one({"service_id": data.service_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not svc:
+        raise HTTPException(404, "Servico nao encontrado")
+
+    original_price = svc.get("price", 0)
+    offer_price = round(original_price * (1 - data.discount_percent / 100), 2)
+    end_mins = time_to_minutes(data.start_time) + svc["duration_minutes"]
+
+    offer = {
+        "offer_id": f"turbo_{uuid.uuid4().hex[:8]}",
+        "user_id": user["user_id"],
+        "slug": user.get("slug", ""),
+        "service_id": data.service_id,
+        "service_name": svc["name"],
+        "date": data.date,
+        "start_time": data.start_time,
+        "end_time": minutes_to_time(end_mins),
+        "discount_percent": data.discount_percent,
+        "original_price": original_price,
+        "offer_price": offer_price,
+        "status": "active",
+        "expires_at": (datetime.now(timezone.utc) + timedelta(hours=data.expires_hours)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.turbo_offers.insert_one(offer)
+    result = await db.turbo_offers.find_one({"offer_id": offer["offer_id"]}, {"_id": 0})
+    return result
+
+@api_router.delete("/turbo-offers/{offer_id}")
+async def delete_turbo_offer(offer_id: str, user=Depends(get_current_user)):
+    await db.turbo_offers.delete_one({"offer_id": offer_id, "user_id": user["user_id"]})
+    return {"message": "Oferta removida"}
+
+@api_router.get("/turbo-offers/public/{slug}")
+async def get_public_turbo_offers(slug: str):
+    user = await db.users.find_one({"slug": slug}, {"_id": 0})
+    if not user:
+        raise HTTPException(404, "Profissional nao encontrado")
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    offers = await db.turbo_offers.find(
+        {"user_id": user["user_id"], "status": "active", "expires_at": {"$gt": now_iso}},
+        {"_id": 0}
+    ).sort("date", 1).to_list(50)
+    return {
+        "offers": offers,
+        "professional": {
+            "name": user.get("name", ""), "business_name": user.get("business_name", ""),
+            "slug": user.get("slug", ""), "picture": user.get("picture", "")
+        }
+    }
+
+@api_router.post("/turbo-offers/{offer_id}/book")
+async def book_turbo_offer(offer_id: str, request: Request):
+    body = await request.json()
+    offer = await db.turbo_offers.find_one({"offer_id": offer_id, "status": "active"}, {"_id": 0})
+    if not offer:
+        raise HTTPException(404, "Oferta nao encontrada ou ja reservada")
+    if offer["expires_at"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(410, "Esta oferta expirou")
+
+    user = await db.users.find_one({"user_id": offer["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(404, "Profissional nao encontrado")
+
+    # Check conflict
+    existing = await db.appointments.find(
+        {"user_id": offer["user_id"], "date": offer["date"], "status": {"$nin": ["cancelled", "no_show"]}}, {"_id": 0}
+    ).to_list(1000)
+    start_mins = time_to_minutes(offer["start_time"])
+    end_mins = time_to_minutes(offer["end_time"])
+    for apt in existing:
+        apt_s = time_to_minutes(apt["start_time"])
+        apt_e = time_to_minutes(apt["end_time"])
+        if start_mins < apt_e and end_mins > apt_s:
+            raise HTTPException(409, "Horario ja reservado")
+
+    token = secrets.token_urlsafe(32)
+    apt_doc = {
+        "appointment_id": f"apt_{uuid.uuid4().hex[:8]}",
+        "user_id": offer["user_id"],
+        "service_id": offer["service_id"],
+        "service_name": offer["service_name"],
+        "service_price": offer["offer_price"],
+        "client_name": body.get("client_name", ""),
+        "client_phone": body.get("client_phone", ""),
+        "client_email": body.get("client_email", ""),
+        "date": offer["date"],
+        "start_time": offer["start_time"],
+        "end_time": offer["end_time"],
+        "status": "scheduled",
+        "notes": f"Turbo Preenchimento (-{offer['discount_percent']}%)",
+        "token": token,
+        "turbo_offer_id": offer_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.appointments.insert_one(apt_doc)
+    await db.turbo_offers.update_one({"offer_id": offer_id}, {"$set": {"status": "booked"}})
+    await mock_send_whatsapp(offer["user_id"], apt_doc)
+
+    result = await db.appointments.find_one({"appointment_id": apt_doc["appointment_id"]}, {"_id": 0})
+    return result
+
+
 # ==================== ROOT ====================
 
 @api_router.get("/")
