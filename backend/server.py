@@ -258,18 +258,22 @@ async def register(data: UserRegister, response: Response):
         slug = f"{slug}-{uuid.uuid4().hex[:4]}"
 
     user_id = f"user_{uuid.uuid4().hex[:12]}"
+    role = data.role if data.role in ("professional", "client") else "professional"
     user = {
         "user_id": user_id,
         "email": data.email,
         "password_hash": hash_password(data.password),
         "name": data.name,
         "slug": slug,
+        "role": role,
         "phone": "",
         "bio": "",
         "picture": "",
         "business_name": data.business_name or "",
         "business_type": "",
         "address": "",
+        "city": "",
+        "state": "",
         "min_advance_hours": 2,
         "cancellation_policy_hours": 6,
         "onboarding_completed": False,
@@ -277,7 +281,8 @@ async def register(data: UserRegister, response: Response):
     }
     await db.users.insert_one(user)
 
-    default_rules = []
+    if role == "professional":
+        default_rules = []
     for day in range(5):
         default_rules.append({
             "rule_id": f"rule_{uuid.uuid4().hex[:8]}",
