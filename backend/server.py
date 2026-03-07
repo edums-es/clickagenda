@@ -1,6 +1,7 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -12,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 import bcrypt
 import secrets
 import httpx
+import re
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -24,6 +26,10 @@ JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
+
+UPLOAD_DIR = ROOT_DIR / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -77,6 +83,9 @@ class ProfileUpdate(BaseModel):
     address: Optional[str] = None
     business_type: Optional[str] = None
     picture: Optional[str] = None
+    cover_picture: Optional[str] = None
+    social_links: Optional[dict] = None
+    featured_service_ids: Optional[List[str]] = None
     min_advance_hours: Optional[int] = None
     cancellation_policy_hours: Optional[int] = None
     city: Optional[str] = None
@@ -107,6 +116,33 @@ def verify_password(password: str, hashed: str) -> bool:
 def generate_session_token() -> str:
     return secrets.token_urlsafe(64)
 
+def normalize_phone(value: str) -> str:
+    return re.sub(r"\D", "", value or "")
+
+def build_phone_regex(digits: str) -> str:
+    if not digits:
+        return ""
+    pattern = r"\D*".join([re.escape(ch) for ch in digits])
+    return pattern
+
+async def log_auth_event(request: Request, user_id: str, action: str, provider: str, email: str = ""):
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else "")
+    event = {
+        "event_id": f"auth_{uuid.uuid4().hex[:12]}",
+        "user_id": user_id,
+        "email": email,
+        "action": action,
+        "provider": provider,
+        "ip_address": ip_address,
+        "user_agent": request.headers.get("user-agent", ""),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    try:
+        await db.auth_events.insert_one(event)
+    except Exception as exc:
+        logger.warning("Auth event log failed: %s", exc)
+
 async def get_current_user(request: Request):
     token = request.cookies.get("session_token")
     if not token:
@@ -133,7 +169,34 @@ async def get_current_user(request: Request):
         raise HTTPException(status_code=401, detail="User not found")
     return user
 
-async def create_session(user_id: str, response: Response) -> str:
+async def get_optional_user(request: Request):
+    token = request.cookies.get("session_token")
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
+        return None
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        return None
+    expires_at = session["expires_at"]
+    if isinstance(expires_at, str):
+        expires_at = datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        return None
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    return user
+
+def is_https_request(request: Request) -> bool:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto:
+        return forwarded_proto.lower() == "https"
+    return request.url.scheme == "https"
+
+async def create_session(user_id: str, request: Request, response: Response) -> str:
     session_token = generate_session_token()
     await db.user_sessions.insert_one({
         "session_id": f"sess_{uuid.uuid4().hex[:12]}",
@@ -142,12 +205,13 @@ async def create_session(user_id: str, response: Response) -> str:
         "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
         "created_at": datetime.now(timezone.utc).isoformat()
     })
+    is_secure = is_https_request(request)
     response.set_cookie(
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=is_secure,
+        samesite="none" if is_secure else "lax",
         path="/",
         max_age=7 * 24 * 60 * 60
     )
@@ -247,7 +311,7 @@ async def calculate_slots(user_id: str, date_str: str, service_id: str):
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register")
-async def register(data: UserRegister, response: Response):
+async def register(data: UserRegister, request: Request, response: Response):
     existing = await db.users.find_one({"email": data.email}, {"_id": 0})
     if existing:
         raise HTTPException(400, "Email ja cadastrado")
@@ -269,11 +333,14 @@ async def register(data: UserRegister, response: Response):
         "phone": "",
         "bio": "",
         "picture": "",
+        "cover_picture": "",
         "business_name": data.business_name or "",
         "business_type": "",
         "address": "",
         "city": "",
         "state": "",
+        "social_links": {},
+        "featured_service_ids": [],
         "min_advance_hours": 2,
         "cancellation_policy_hours": 6,
         "onboarding_completed": False,
@@ -281,28 +348,27 @@ async def register(data: UserRegister, response: Response):
     }
     await db.users.insert_one(user)
 
+    default_rules = []
     if role == "professional":
-        default_rules = []
-    for day in range(5):
+        for day in range(5):
+            default_rules.append({
+                "rule_id": f"rule_{uuid.uuid4().hex[:8]}",
+                "user_id": user_id,
+                "day_of_week": day,
+                "start_time": "09:00",
+                "end_time": "18:00",
+                "is_active": True
+            })
         default_rules.append({
             "rule_id": f"rule_{uuid.uuid4().hex[:8]}",
             "user_id": user_id,
-            "day_of_week": day,
+            "day_of_week": 5,
             "start_time": "09:00",
-            "end_time": "18:00",
+            "end_time": "13:00",
             "is_active": True
         })
-    default_rules.append({
-        "rule_id": f"rule_{uuid.uuid4().hex[:8]}",
-        "user_id": user_id,
-        "day_of_week": 5,
-        "start_time": "09:00",
-        "end_time": "13:00",
-        "is_active": True
-    })
     if default_rules:
         await db.availability_rules.insert_many(default_rules)
-
         await db.breaks.insert_one({
             "break_id": f"brk_{uuid.uuid4().hex[:8]}",
             "user_id": user_id,
@@ -311,20 +377,22 @@ async def register(data: UserRegister, response: Response):
             "end_time": "13:00"
         })
 
-    session_token = await create_session(user_id, response)
+    session_token = await create_session(user_id, request, response)
+    await log_auth_event(request, user_id, "register", "password", user["email"])
     user_data = {k: v for k, v in user.items() if k not in ("password_hash", "_id")}
     return {"user": user_data, "session_token": session_token}
 
 
 @api_router.post("/auth/login")
-async def login(data: UserLogin, response: Response):
+async def login(data: UserLogin, request: Request, response: Response):
     user = await db.users.find_one({"email": data.email}, {"_id": 0})
     if not user or not user.get("password_hash"):
         raise HTTPException(401, "Email ou senha incorretos")
     if not verify_password(data.password, user["password_hash"]):
         raise HTTPException(401, "Email ou senha incorretos")
 
-    session_token = await create_session(user["user_id"], response)
+    session_token = await create_session(user["user_id"], request, response)
+    await log_auth_event(request, user["user_id"], "login", "password", user["email"])
     user_data = {k: v for k, v in user.items() if k != "password_hash"}
     return {"user": user_data, "session_token": session_token}
 
@@ -365,11 +433,14 @@ async def google_session(request: Request, response: Response):
             "phone": "",
             "bio": "",
             "picture": google_data.get("picture", ""),
+            "cover_picture": "",
             "business_name": "",
             "business_type": "",
             "address": "",
             "city": "",
             "state": "",
+            "social_links": {},
+            "featured_service_ids": [],
             "min_advance_hours": 2,
             "cancellation_policy_hours": 6,
             "onboarding_completed": False,
@@ -397,6 +468,7 @@ async def google_session(request: Request, response: Response):
         })
         if default_rules:
             await db.availability_rules.insert_many(default_rules)
+        auth_action = "google_register"
     else:
         user_id = user["user_id"]
         if google_data.get("picture"):
@@ -405,8 +477,10 @@ async def google_session(request: Request, response: Response):
                 {"$set": {"picture": google_data["picture"]}}
             )
             user["picture"] = google_data["picture"]
+        auth_action = "google_login"
 
-    session_token = await create_session(user_id, response)
+    session_token = await create_session(user_id, request, response)
+    await log_auth_event(request, user_id, auth_action, "google", email)
     user_data = {k: v for k, v in user.items() if k not in ("password_hash", "_id")}
     return {"user": user_data, "session_token": session_token}
 
@@ -421,7 +495,13 @@ async def logout(request: Request, response: Response):
     token = request.cookies.get("session_token")
     if token:
         await db.user_sessions.delete_one({"session_token": token})
-    response.delete_cookie(key="session_token", path="/", samesite="none", secure=True)
+    is_secure = is_https_request(request)
+    response.delete_cookie(
+        key="session_token",
+        path="/",
+        samesite="none" if is_secure else "lax",
+        secure=is_secure
+    )
     return {"message": "Logout realizado"}
 
 
@@ -430,6 +510,8 @@ async def logout(request: Request, response: Response):
 @api_router.put("/profile")
 async def update_profile(data: ProfileUpdate, user=Depends(get_current_user)):
     update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "phone" in update_data:
+        update_data["phone_norm"] = normalize_phone(update_data["phone"])
     if "slug" in update_data:
         existing = await db.users.find_one(
             {"slug": update_data["slug"], "user_id": {"$ne": user["user_id"]}},
@@ -437,12 +519,59 @@ async def update_profile(data: ProfileUpdate, user=Depends(get_current_user)):
         )
         if existing:
             raise HTTPException(400, "Este link ja esta em uso")
+    if "social_links" in update_data and not isinstance(update_data["social_links"], dict):
+        raise HTTPException(400, "Links sociais invalidos")
+    if "featured_service_ids" in update_data:
+        if not isinstance(update_data["featured_service_ids"], list):
+            raise HTTPException(400, "Servicos em destaque invalidos")
+        unique_ids = []
+        seen = set()
+        for service_id in update_data["featured_service_ids"]:
+            if service_id and service_id not in seen:
+                unique_ids.append(service_id)
+                seen.add(service_id)
+        unique_ids = unique_ids[:3]
+        if unique_ids:
+            active_services = await db.services.find(
+                {"user_id": user["user_id"], "active": True, "service_id": {"$in": unique_ids}},
+                {"_id": 0, "service_id": 1}
+            ).to_list(100)
+            allowed = {svc["service_id"] for svc in active_services}
+            unique_ids = [service_id for service_id in unique_ids if service_id in allowed]
+        update_data["featured_service_ids"] = unique_ids
 
     if update_data:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": update_data})
 
     updated = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     return {k: v for k, v in updated.items() if k != "password_hash"}
+
+
+@api_router.post("/profile/upload")
+async def upload_profile_image(
+    request: Request,
+    image_type: str = "picture",
+    file: UploadFile = File(...),
+    user=Depends(get_current_user)
+):
+    if image_type not in ("picture", "cover_picture"):
+        raise HTTPException(400, "Tipo de imagem invalido")
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Arquivo invalido")
+
+    filename = file.filename or "upload"
+    ext = Path(filename).suffix.lower()
+    if not ext:
+        content_ext = (file.content_type.split("/")[-1] or "").lower()
+        ext = f".{content_ext}" if content_ext else ".png"
+
+    saved_name = f"{user['user_id']}_{image_type}_{uuid.uuid4().hex[:10]}{ext}"
+    saved_path = UPLOAD_DIR / saved_name
+    content = await file.read()
+    saved_path.write_bytes(content)
+
+    public_url = f"{request.base_url}uploads/{saved_name}"
+    return {"url": public_url}
 
 
 # ==================== SERVICES ROUTES ====================
@@ -576,6 +705,7 @@ async def create_appointment(data: AppointmentCreate, user=Depends(get_current_u
             raise HTTPException(409, f"Conflito de horario com agendamento as {apt['start_time']}")
 
     token = secrets.token_urlsafe(32)
+    phone_norm = normalize_phone(data.client_phone)
     appointment = {
         "appointment_id": f"apt_{uuid.uuid4().hex[:8]}",
         "user_id": user["user_id"],
@@ -584,6 +714,7 @@ async def create_appointment(data: AppointmentCreate, user=Depends(get_current_u
         "service_price": service.get("price", 0),
         "client_name": data.client_name,
         "client_phone": data.client_phone,
+        "client_phone_norm": phone_norm,
         "client_email": data.client_email or "",
         "date": data.date,
         "start_time": data.start_time,
@@ -597,7 +728,8 @@ async def create_appointment(data: AppointmentCreate, user=Depends(get_current_u
     await db.appointments.insert_one(appointment)
 
     existing_client = await db.clients.find_one(
-        {"user_id": user["user_id"], "phone": data.client_phone}, {"_id": 0}
+        {"user_id": user["user_id"], "$or": [{"phone": data.client_phone}, {"phone_norm": phone_norm}]},
+        {"_id": 0}
     )
     if not existing_client and data.client_phone:
         await db.clients.insert_one({
@@ -605,6 +737,7 @@ async def create_appointment(data: AppointmentCreate, user=Depends(get_current_u
             "user_id": user["user_id"],
             "name": data.client_name,
             "phone": data.client_phone,
+            "phone_norm": phone_norm,
             "email": data.client_email or "",
             "notes": "",
             "tags": [],
@@ -707,14 +840,26 @@ async def get_public_profile(slug: str):
         "business_type": user.get("business_type", ""),
         "bio": user.get("bio", ""),
         "picture": user.get("picture", ""),
+        "cover_picture": user.get("cover_picture", ""),
         "address": user.get("address", ""),
         "slug": user.get("slug", ""),
-        "phone": user.get("phone", "")
+        "phone": user.get("phone", ""),
+        "social_links": user.get("social_links", {}),
+        "featured_service_ids": user.get("featured_service_ids", [])
     }
     services = await db.services.find(
         {"user_id": user["user_id"], "active": True}, {"_id": 0}
     ).to_list(100)
-    return {"professional": public_data, "services": services}
+    featured_ids = public_data.get("featured_service_ids") or []
+    if featured_ids:
+        featured_services = await db.services.find(
+            {"user_id": user["user_id"], "active": True, "service_id": {"$in": featured_ids}}, {"_id": 0}
+        ).to_list(100)
+        order = {service_id: index for index, service_id in enumerate(featured_ids)}
+        featured_services.sort(key=lambda svc: order.get(svc.get("service_id", ""), len(featured_ids)))
+    else:
+        featured_services = services[:3]
+    return {"professional": public_data, "services": services, "featured_services": featured_services}
 
 @api_router.get("/public/{slug}/slots")
 async def get_public_slots(slug: str, date: str, service_id: str):
@@ -725,7 +870,7 @@ async def get_public_slots(slug: str, date: str, service_id: str):
     return {"slots": slots, "date": date}
 
 @api_router.post("/public/{slug}/book")
-async def public_book(slug: str, data: AppointmentCreate):
+async def public_book(slug: str, data: AppointmentCreate, request: Request):
     user = await db.users.find_one({"slug": slug}, {"_id": 0})
     if not user:
         raise HTTPException(404, "Profissional nao encontrado")
@@ -753,6 +898,8 @@ async def public_book(slug: str, data: AppointmentCreate):
             raise HTTPException(409, "Este horario ja foi reservado. Escolha outro.")
 
     token = secrets.token_urlsafe(32)
+    phone_norm = normalize_phone(data.client_phone)
+    client_user = await get_optional_user(request)
     appointment = {
         "appointment_id": f"apt_{uuid.uuid4().hex[:8]}",
         "user_id": user["user_id"],
@@ -761,6 +908,7 @@ async def public_book(slug: str, data: AppointmentCreate):
         "service_price": service.get("price", 0),
         "client_name": data.client_name,
         "client_phone": data.client_phone,
+        "client_phone_norm": phone_norm,
         "client_email": data.client_email or "",
         "date": data.date,
         "start_time": data.start_time,
@@ -771,10 +919,13 @@ async def public_book(slug: str, data: AppointmentCreate):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
+    if client_user and client_user.get("role") == "client":
+        appointment["client_user_id"] = client_user["user_id"]
     await db.appointments.insert_one(appointment)
 
     existing_client = await db.clients.find_one(
-        {"user_id": user["user_id"], "phone": data.client_phone}, {"_id": 0}
+        {"user_id": user["user_id"], "$or": [{"phone": data.client_phone}, {"phone_norm": phone_norm}]},
+        {"_id": 0}
     )
     if not existing_client and data.client_phone:
         await db.clients.insert_one({
@@ -782,6 +933,7 @@ async def public_book(slug: str, data: AppointmentCreate):
             "user_id": user["user_id"],
             "name": data.client_name,
             "phone": data.client_phone,
+            "phone_norm": phone_norm,
             "email": data.client_email or "",
             "notes": "",
             "tags": [],
@@ -817,13 +969,7 @@ async def confirm_by_token(token: str):
     apt = await db.appointments.find_one({"token": token}, {"_id": 0})
     if not apt:
         raise HTTPException(404, "Agendamento nao encontrado")
-    if apt["status"] == "cancelled":
-        raise HTTPException(400, "Este agendamento ja foi cancelado")
-    await db.appointments.update_one(
-        {"token": token},
-        {"$set": {"status": "confirmed", "updated_at": datetime.now(timezone.utc).isoformat()}}
-    )
-    return {"message": "Agendamento confirmado!", "status": "confirmed"}
+    raise HTTPException(403, "Apenas o profissional pode confirmar o agendamento")
 
 @api_router.post("/appointment/manage/{token}/cancel")
 async def cancel_by_token(token: str):
@@ -853,7 +999,11 @@ async def cancel_by_token(token: str):
 # ==================== DASHBOARD ROUTES ====================
 
 @api_router.get("/dashboard/stats")
-async def get_dashboard_stats(user=Depends(get_current_user)):
+async def get_dashboard_stats(
+    user=Depends(get_current_user),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     today_apts = await db.appointments.find(
@@ -873,6 +1023,25 @@ async def get_dashboard_stats(user=Depends(get_current_user)):
     ).to_list(10000)
     revenue = sum(a.get("service_price", 0) for a in month_apts)
 
+    if start_date and end_date and start_date > end_date:
+        start_date, end_date = end_date, start_date
+    period_start = start_date or month_start
+    period_end = end_date or month_end
+
+    period_apts = await db.appointments.find(
+        {"user_id": user["user_id"], "date": {"$gte": period_start, "$lte": period_end}},
+        {"_id": 0}
+    ).to_list(10000)
+    period_active = [a for a in period_apts if a["status"] != "cancelled"]
+    total_period = len(period_active)
+    confirmed_period = len([a for a in period_active if a["status"] in ["confirmed", "arrived", "in_progress", "completed"]])
+    no_show_period = len([a for a in period_active if a["status"] == "no_show"])
+    completed_period = len([a for a in period_active if a["status"] == "completed"])
+    revenue_period = sum(a.get("service_price", 0) for a in period_active if a["status"] == "completed")
+    ticket_avg = (revenue_period / completed_period) if completed_period > 0 else 0
+    confirmation_rate = (confirmed_period / total_period) if total_period > 0 else 0
+    no_show_rate = (no_show_period / total_period) if total_period > 0 else 0
+
     total_clients = await db.clients.count_documents({"user_id": user["user_id"]})
 
     upcoming = await db.appointments.find(
@@ -886,6 +1055,16 @@ async def get_dashboard_stats(user=Depends(get_current_user)):
         "confirmed": confirmed,
         "completed": completed,
         "revenue_month": revenue,
+        "period_start": period_start,
+        "period_end": period_end,
+        "total_period": total_period,
+        "confirmed_period": confirmed_period,
+        "no_show_period": no_show_period,
+        "completed_period": completed_period,
+        "confirmation_rate": confirmation_rate,
+        "no_show_rate": no_show_rate,
+        "revenue_period": revenue_period,
+        "ticket_avg": ticket_avg,
         "total_clients": total_clients,
         "upcoming": upcoming
     }
@@ -1022,12 +1201,17 @@ async def client_dashboard(user=Depends(get_current_user)):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     phone = user.get("phone", "")
     email = user.get("email", "")
+    phone_digits = normalize_phone(phone)
+    phone_pattern = build_phone_regex(phone_digits)
 
     query_conditions = []
-    if phone:
-        query_conditions.append({"client_phone": phone})
+    if phone_digits:
+        query_conditions.append({"client_phone_norm": phone_digits})
+        if phone_pattern:
+            query_conditions.append({"client_phone": {"$regex": phone_pattern}})
     if email:
         query_conditions.append({"client_email": email})
+    query_conditions.append({"client_user_id": user["user_id"]})
 
     if not query_conditions:
         return {"upcoming": [], "recent": [], "favorites_count": 0, "total_appointments": 0}
@@ -1061,11 +1245,16 @@ async def client_dashboard(user=Depends(get_current_user)):
 async def client_appointments(user=Depends(get_current_user), status: Optional[str] = None):
     phone = user.get("phone", "")
     email = user.get("email", "")
+    phone_digits = normalize_phone(phone)
+    phone_pattern = build_phone_regex(phone_digits)
     query_conditions = []
-    if phone:
-        query_conditions.append({"client_phone": phone})
+    if phone_digits:
+        query_conditions.append({"client_phone_norm": phone_digits})
+        if phone_pattern:
+            query_conditions.append({"client_phone": {"$regex": phone_pattern}})
     if email:
         query_conditions.append({"client_email": email})
+    query_conditions.append({"client_user_id": user["user_id"]})
     if not query_conditions:
         return []
 
@@ -1395,6 +1584,7 @@ async def startup():
     await db.turbo_offers.create_index([("slug", 1), ("status", 1)], background=True)
     await db.favorites.create_index([("client_user_id", 1)], background=True)
     await db.users.create_index([("role", 1), ("city", 1)], background=True)
+    await db.auth_events.create_index([("user_id", 1), ("created_at", -1)], background=True)
     logger.info("Click Agenda API started successfully")
 
 @app.on_event("shutdown")

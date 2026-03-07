@@ -6,18 +6,28 @@ import { Toaster } from "@/components/ui/sonner";
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import Pricing from "@/pages/Pricing";
 import AuthCallback from "@/pages/AuthCallback";
 import Dashboard from "@/pages/Dashboard";
 import CalendarPage from "@/pages/CalendarPage";
 import Clients from "@/pages/Clients";
 import Services from "@/pages/Services";
 import Settings from "@/pages/Settings";
+import Marketplace from "@/pages/Marketplace";
+import QuickLinks from "@/pages/QuickLinks";
+import QuickLinkPage from "@/pages/QuickLinkPage";
+import TurboOffers from "@/pages/TurboOffers";
+import ClientDashboard from "@/pages/ClientDashboard";
+import ClientAppointments from "@/pages/ClientAppointments";
+import ClientFavorites from "@/pages/ClientFavorites";
+import ClientConfig from "@/pages/ClientConfig";
 import PublicProfile from "@/pages/PublicProfile";
 import BookingFlow from "@/pages/BookingFlow";
 import AppointmentManage from "@/pages/AppointmentManage";
 import DashboardLayout from "@/components/DashboardLayout";
+import ClientLayout from "@/components/ClientLayout";
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, roles }) {
   const { user, loading } = useAuth();
   if (loading) {
     return (
@@ -30,6 +40,9 @@ function ProtectedRoute({ children }) {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  if (roles && !roles.includes(user.role)) {
+    return <Navigate to={user.role === "client" ? "/cliente" : "/dashboard"} replace />;
+  }
   return children;
 }
 
@@ -47,13 +60,16 @@ function AppRouter() {
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/planos" element={<Pricing />} />
       <Route path="/p/:slug" element={<PublicProfile />} />
       <Route path="/p/:slug/agendar" element={<BookingFlow />} />
       <Route path="/agendamento/:token" element={<AppointmentManage />} />
+      <Route path="/marketplace" element={<Marketplace />} />
+      <Route path="/ql/:code" element={<QuickLinkPage />} />
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={["professional"]}>
             <DashboardLayout><Dashboard /></DashboardLayout>
           </ProtectedRoute>
         }
@@ -61,7 +77,7 @@ function AppRouter() {
       <Route
         path="/agenda"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={["professional"]}>
             <DashboardLayout><CalendarPage /></DashboardLayout>
           </ProtectedRoute>
         }
@@ -69,7 +85,7 @@ function AppRouter() {
       <Route
         path="/clientes"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={["professional"]}>
             <DashboardLayout><Clients /></DashboardLayout>
           </ProtectedRoute>
         }
@@ -77,16 +93,64 @@ function AppRouter() {
       <Route
         path="/servicos"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={["professional"]}>
             <DashboardLayout><Services /></DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/links-rapidos"
+        element={
+          <ProtectedRoute roles={["professional"]}>
+            <DashboardLayout><QuickLinks /></DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/turbo"
+        element={
+          <ProtectedRoute roles={["professional"]}>
+            <DashboardLayout><TurboOffers /></DashboardLayout>
           </ProtectedRoute>
         }
       />
       <Route
         path="/configuracoes"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={["professional"]}>
             <DashboardLayout><Settings /></DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cliente"
+        element={
+          <ProtectedRoute roles={["client"]}>
+            <ClientLayout><ClientDashboard /></ClientLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cliente/agendamentos"
+        element={
+          <ProtectedRoute roles={["client"]}>
+            <ClientLayout><ClientAppointments /></ClientLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cliente/favoritos"
+        element={
+          <ProtectedRoute roles={["client"]}>
+            <ClientLayout><ClientFavorites /></ClientLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/cliente/config"
+        element={
+          <ProtectedRoute roles={["client"]}>
+            <ClientLayout><ClientConfig /></ClientLayout>
           </ProtectedRoute>
         }
       />

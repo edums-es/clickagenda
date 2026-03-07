@@ -96,21 +96,67 @@ export default function Services() {
     }
   };
 
+  const totalServices = services.length;
+  const activeServices = services.filter((s) => s.active !== false).length;
+  const avgDuration = services.length
+    ? Math.round(services.reduce((acc, s) => acc + (parseInt(s.duration_minutes) || 0), 0) / services.length)
+    : 0;
+  const avgPrice = services.length
+    ? services.reduce((acc, s) => acc + (parseFloat(s.price) || 0), 0) / services.length
+    : 0;
+
   return (
     <div className="space-y-6" data-testid="services-page">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">Servicos</h1>
-          <p className="text-sm text-muted-foreground mt-1">{services.length} servicos cadastrados</p>
+      <div className="rounded-2xl border border-border bg-card/80 p-6 md:p-8 shadow-soft">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">Gestao</p>
+            <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight mt-2">Servicos</h1>
+            <p className="text-sm text-muted-foreground mt-2">
+              Organize seus servicos, duracao e precos em um painel rapido.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={openNew}
+              data-testid="add-service-btn"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Novo servico
+            </Button>
+          </div>
         </div>
-        <Button
-          onClick={openNew}
-          data-testid="add-service-btn"
-          className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Novo servico
-        </Button>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
+          <Card className="border-border/70 shadow-none">
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground">Total de servicos</p>
+              <p className="text-2xl font-semibold mt-2">{totalServices}</p>
+              <p className="text-xs text-muted-foreground mt-1">Cadastrados no seu catalogo</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-none">
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground">Servicos ativos</p>
+              <p className="text-2xl font-semibold mt-2">{activeServices}</p>
+              <p className="text-xs text-muted-foreground mt-1">Visiveis para clientes</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-none">
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground">Duracao media</p>
+              <p className="text-2xl font-semibold mt-2">{avgDuration} min</p>
+              <p className="text-xs text-muted-foreground mt-1">Tempo por atendimento</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/70 shadow-none">
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground">Preco medio</p>
+              <p className="text-2xl font-semibold mt-2">R$ {avgPrice.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Ticket medio</p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {loading ? (

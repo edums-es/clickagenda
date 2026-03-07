@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const defaultBackendUrl = `${window.location.protocol}//${window.location.hostname}:8000`;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || defaultBackendUrl;
 
 const api = axios.create({
   baseURL: `${BACKEND_URL}/api`,
@@ -19,8 +20,11 @@ api.interceptors.response.use(
         path === "/" ||
         path === "/login" ||
         path === "/register" ||
+        path === "/marketplace" ||
+        path.startsWith("/ql/") ||
         path.startsWith("/p/") ||
-        path.startsWith("/agendamento/");
+        path.startsWith("/agendamento/") ||
+        path === "/auth/callback";
       if (!isPublicRoute && !window.location.hash?.includes("session_id=")) {
         window.location.href = "/login";
       }

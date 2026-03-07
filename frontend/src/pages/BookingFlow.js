@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useSearchParams, Link } from "react-router-dom";
 import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,16 +19,27 @@ import {
   Phone,
   Mail,
   MessageSquare,
+  MessageCircle,
 } from "lucide-react";
 import { format, addDays, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
 const STEPS = ["Servico", "Data e horario", "Seus dados", "Confirmacao"];
+const confirmationStatusLabels = {
+  scheduled: "Aguardando confirmacao",
+  confirmed: "Confirmado",
+  arrived: "Chegou",
+  in_progress: "Em atendimento",
+  completed: "Concluido",
+  cancelled: "Cancelado",
+  no_show: "Faltou",
+};
 
 export default function BookingFlow() {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
+  const { user, updateUser } = useAuth();
   const preSelectedService = searchParams.get("service");
 
   const [step, setStep] = useState(0);
@@ -41,12 +53,9 @@ export default function BookingFlow() {
   const [clientInfo, setClientInfo] = useState({ name: "", phone: "", email: "", notes: "" });
   const [booking, setBooking] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
+  const isClientUser = user?.role === "client";
 
-  useEffect(() => {
-    loadProfile();
-  }, [slug]);
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       const res = await api.get(`/public/${slug}`);
       setProfileData(res.data);
@@ -62,7 +71,21 @@ export default function BookingFlow() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [slug, preSelectedService]);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  useEffect(() => {
+    if (!isClientUser) return;
+    setClientInfo((prev) => ({
+      ...prev,
+      name: user?.name || prev.name,
+      phone: user?.phone || prev.phone,
+      email: user?.email || prev.email,
+    }));
+  }, [isClientUser, user]);
 
   const loadSlots = async (date) => {
     if (!selectedService) return;
@@ -101,6 +124,22 @@ export default function BookingFlow() {
         start_time: selectedSlot.start_time,
         notes: clientInfo.notes,
       });
+      if (isClientUser) {
+        const profilePayload = {};
+        if (!user?.phone && clientInfo.phone) profilePayload.phone = clientInfo.phone;
+        if (!user?.email && clientInfo.email) profilePayload.email = clientInfo.email;
+        if (!user?.name && clientInfo.name) profilePayload.name = clientInfo.name;
+        if (Object.keys(profilePayload).length > 0) {
+          const profileRes = await api.put("/profile", profilePayload);
+          updateUser(profileRes.data);
+        }
+      }
+      if (!user) {
+        localStorage.setItem(
+          "pending_client_register",
+          JSON.stringify({ name: clientInfo.name, phone: clientInfo.phone, email: clientInfo.email })
+        );
+      }
       setConfirmation(res.data);
       setStep(3);
       toast.success("Agendamento realizado!");
@@ -121,6 +160,27 @@ export default function BookingFlow() {
 
   if (!profileData) return null;
   const { professional, services } = profileData;
+  const getWhatsappLink = () => {
+    if (!confirmation || !professional) return "";
+    const raw =
+      professional?.social_links?.whatsapp ||
+      professional?.phone ||
+      "";
+    const digits = raw.replace(/\D/g, "");
+    if (!digits) return "";
+    const message = [
+      `Resumo do agendamento - ${professional.business_name || professional.name}`,
+      `Servico: ${confirmation.service_name}`,
+      `Data: ${confirmation.date}`,
+      `Horario: ${confirmation.start_time} - ${confirmation.end_time}`,
+      `Cliente: ${confirmation.client_name || clientInfo.name}`,
+      `WhatsApp: ${confirmation.client_phone || clientInfo.phone}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+  };
+  const whatsappLink = getWhatsappLink();
 
   return (
     <div className="min-h-screen bg-background" data-testid="booking-flow-page">
@@ -141,62 +201,77 @@ export default function BookingFlow() {
         </div>
       </div>
 
-      {/* Progress */}
-      <div className="max-w-3xl mx-auto px-4 pt-6">
-        <div className="flex items-center gap-2 mb-8">
-          {STEPS.map((s, i) => (
-            <div key={s} className="flex items-center gap-2 flex-1">
-              <div
-                className={`h-2 flex-1 rounded-full transition-colors ${
-                  i <= step ? "bg-primary" : "bg-muted"
-                }`}
-              />
+      <div className="max-w-4xl mx-auto px-4 pt-6">
+        <Card className="shadow-soft">
+          <CardContent className="pt-5 space-y-4">
+            <div className="flex items-center gap-2">
+              {STEPS.map((s, i) => (
+                <div key={s} className="flex items-center gap-2 flex-1">
+                  <div
+                    className={`h-2 flex-1 rounded-full transition-colors ${
+                      i <= step ? "bg-primary" : "bg-muted"
+                    }`}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground mb-1">Passo {step + 1} de {STEPS.length}</p>
-        <h2 className="font-heading text-xl font-semibold mb-6" data-testid="step-title">
-          {STEPS[step]}
-        </h2>
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Passo {step + 1} de {STEPS.length}</p>
+                <h2 className="font-heading text-xl font-semibold" data-testid="step-title">
+                  {STEPS[step]}
+                </h2>
+              </div>
+              {selectedService && (
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{selectedService.name}</span>
+                  {selectedService.duration_minutes ? ` · ${selectedService.duration_minutes} min` : ""}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Steps */}
-      <div className="max-w-3xl mx-auto px-4 pb-32 animate-fade-in">
+      <div className="max-w-4xl mx-auto px-4 pb-32 animate-fade-in">
         {/* Step 0: Service selection */}
         {step === 0 && (
-          <div className="space-y-3" data-testid="step-service">
-            {services.map((svc, i) => (
-              <Card
-                key={svc.service_id}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  selectedService?.service_id === svc.service_id
-                    ? "border-primary shadow-md"
-                    : "border-border"
-                }`}
-                onClick={() => setSelectedService(svc)}
-                data-testid={`booking-service-${i}`}
-              >
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Scissors className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-sm">{svc.name}</p>
-                      <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" /> {svc.duration_minutes}min
-                        </span>
-                        {svc.price > 0 && <span>R$ {svc.price.toFixed(2)}</span>}
+          <div className="space-y-4" data-testid="step-service">
+            <div className="grid sm:grid-cols-2 gap-3">
+              {services.map((svc, i) => (
+                <Card
+                  key={svc.service_id}
+                  className={`cursor-pointer transition-all hover:shadow-md ${
+                    selectedService?.service_id === svc.service_id
+                      ? "border-primary shadow-md"
+                      : "border-border"
+                  }`}
+                  onClick={() => setSelectedService(svc)}
+                  data-testid={`booking-service-${i}`}
+                >
+                  <CardContent className="py-4">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Scissors className="h-5 w-5 text-primary" />
                       </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{svc.name}</p>
+                        <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> {svc.duration_minutes}min
+                          </span>
+                          {svc.price > 0 && <span>R$ {svc.price.toFixed(2)}</span>}
+                        </div>
+                      </div>
+                      {selectedService?.service_id === svc.service_id && (
+                        <CheckCircle2 className="h-5 w-5 text-primary" />
+                      )}
                     </div>
-                    {selectedService?.service_id === svc.service_id && (
-                      <CheckCircle2 className="h-5 w-5 text-primary" />
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
             <Button
               onClick={() => selectedService && setStep(1)}
               disabled={!selectedService}
@@ -211,6 +286,27 @@ export default function BookingFlow() {
         {/* Step 1: Date + Time */}
         {step === 1 && (
           <div className="space-y-6" data-testid="step-datetime">
+            {selectedService && (
+              <Card className="shadow-soft">
+                <CardContent className="pt-5">
+                  <div className="flex items-center gap-4">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Scissors className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold">{selectedService.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedService.duration_minutes} min
+                        {selectedService.price > 0 ? ` · R$ ${selectedService.price.toFixed(2)}` : ""}
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setStep(0)}>
+                      Trocar
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <Card className="shadow-soft">
               <CardContent className="pt-4">
                 <Calendar
@@ -281,6 +377,11 @@ export default function BookingFlow() {
           <div className="space-y-4" data-testid="step-client-info">
             <Card className="shadow-soft">
               <CardContent className="pt-6 space-y-4">
+                {isClientUser && (
+                  <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    Seus dados foram preenchidos com base no seu perfil.
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Nome completo *</Label>
                   <div className="relative">
@@ -291,6 +392,7 @@ export default function BookingFlow() {
                       placeholder="Seu nome"
                       data-testid="booking-client-name"
                       className="pl-10"
+                      disabled={isClientUser && !!user?.name}
                     />
                   </div>
                 </div>
@@ -304,6 +406,7 @@ export default function BookingFlow() {
                       placeholder="(11) 99999-9999"
                       data-testid="booking-client-phone"
                       className="pl-10"
+                      disabled={isClientUser && !!user?.phone}
                     />
                   </div>
                 </div>
@@ -318,6 +421,7 @@ export default function BookingFlow() {
                       placeholder="seu@email.com"
                       data-testid="booking-client-email"
                       className="pl-10"
+                      disabled={isClientUser && !!user?.email}
                     />
                   </div>
                 </div>
@@ -371,41 +475,82 @@ export default function BookingFlow() {
 
         {/* Step 3: Confirmation */}
         {step === 3 && confirmation && (
-          <div className="text-center space-y-6" data-testid="step-confirmation">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="h-8 w-8 text-primary" />
-            </div>
-            <div>
-              <h3 className="font-heading text-2xl font-bold">Agendamento confirmado!</h3>
-              <p className="text-muted-foreground mt-2">
-                Voce recebera uma confirmacao no seu WhatsApp.
-              </p>
+          <div className="space-y-6" data-testid="step-confirmation">
+            <div className="rounded-2xl border border-border bg-gradient-to-r from-teal-50 to-stone-100 p-6">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                  <CheckCircle2 className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-muted-foreground">Agendamento confirmado para enviar</p>
+                  <h3 className="font-heading text-2xl font-bold mt-1">Tudo certo!</h3>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Aguardando confirmacao do profissional. Voce sera avisado quando houver atualizacao.
+                  </p>
+                </div>
+                <span className={`status-badge status-${confirmation.status} text-xs px-3 py-1`}>
+                  {confirmationStatusLabels[confirmation.status] || confirmation.status}
+                </span>
+              </div>
             </div>
 
             <Card className="shadow-soft text-left">
-              <CardContent className="pt-6 space-y-2 text-sm">
-                <p><span className="text-muted-foreground">Servico:</span> {confirmation.service_name}</p>
-                <p><span className="text-muted-foreground">Data:</span> {confirmation.date}</p>
-                <p><span className="text-muted-foreground">Horario:</span> {confirmation.start_time} - {confirmation.end_time}</p>
-                <p><span className="text-muted-foreground">Status:</span> {confirmation.status}</p>
+              <CardContent className="pt-6 space-y-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Servico</p>
+                    <p className="font-medium">{confirmation.service_name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Profissional</p>
+                    <p className="font-medium">{professional.business_name || professional.name}</p>
+                  </div>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-3 pt-2">
+                  <div className="rounded-lg border border-border/70 p-3">
+                    <p className="text-xs text-muted-foreground">Data</p>
+                    <p className="font-medium">{confirmation.date}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 p-3">
+                    <p className="text-xs text-muted-foreground">Horario</p>
+                    <p className="font-medium">{confirmation.start_time} - {confirmation.end_time}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/70 p-3">
+                    <p className="text-xs text-muted-foreground">Status</p>
+                    <p className="font-medium">{confirmationStatusLabels[confirmation.status] || confirmation.status}</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
-            {confirmation.token && (
-              <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  Precisa cancelar ou confirmar? Use o link abaixo:
-                </p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {confirmation.token && (
                 <Link to={`/agendamento/${confirmation.token}`}>
-                  <Button variant="outline" size="sm" data-testid="manage-appointment-link">
+                  <Button variant="outline" className="w-full" data-testid="manage-appointment-link">
                     Gerenciar agendamento
                   </Button>
                 </Link>
-              </div>
+              )}
+              {whatsappLink && (
+                <a href={whatsappLink} target="_blank" rel="noopener noreferrer">
+                  <Button className="gap-2 w-full" data-testid="whatsapp-summary-btn">
+                    <MessageCircle className="h-4 w-4" />
+                    Enviar resumo no WhatsApp
+                  </Button>
+                </a>
+              )}
+            </div>
+
+            {!user && (
+              <Link to="/register">
+                <Button variant="outline" className="w-full" data-testid="guest-register-cta">
+                  Criar conta para acompanhar
+                </Button>
+              </Link>
             )}
 
             <Link to={`/p/${slug}`}>
-              <Button variant="ghost" data-testid="back-to-profile-btn">
+              <Button variant="ghost" className="w-full" data-testid="back-to-profile-btn">
                 Voltar ao perfil
               </Button>
             </Link>

@@ -23,6 +23,9 @@ export default function Marketplace() {
   const [search, setSearch] = useState("");
   const [selectedCity, setSelectedCity] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [showOffersOnly, setShowOffersOnly] = useState(false);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locating, setLocating] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -56,6 +59,13 @@ export default function Marketplace() {
       }).catch(() => {});
     }
   }, [user]);
+  
+  useEffect(() => {
+    if (user?.city && !selectedCity && !locationQuery) {
+      setSelectedCity(user.city);
+      setLocationQuery(user.city);
+    }
+  }, [user, selectedCity, locationQuery]);
 
   const toggleFavorite = async (proId) => {
     if (!user) {
@@ -76,6 +86,61 @@ export default function Marketplace() {
   };
 
   const initials = (name) => name ? name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() : "?";
+  const visibleProfessionals = showOffersOnly
+    ? professionals.filter((pro) => pro.has_offers)
+    : professionals;
+  const topCategories = categories.slice(0, 4);
+  const topCities = cities.slice(0, 4);
+  const handleCitySelect = (value) => {
+    const normalized = value === "all" ? "" : value;
+    setSelectedCity(normalized);
+    setLocationQuery(normalized);
+  };
+  const handleLocationChange = (value) => {
+    setLocationQuery(value);
+    setSelectedCity(value);
+  };
+  const handleUseLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocalizacao nao suportada");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+          const address = data.address || {};
+          const city =
+            address.city ||
+            address.town ||
+            address.village ||
+            address.suburb ||
+            address.county ||
+            "";
+          if (!city) {
+            toast.error("Nao foi possivel identificar a cidade");
+            return;
+          }
+          setSelectedCity(city);
+          setLocationQuery(city);
+        } catch {
+          toast.error("Erro ao detectar localizacao");
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        toast.error("Permissao de localizacao negada");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background" data-testid="marketplace-page">
@@ -94,7 +159,7 @@ export default function Marketplace() {
           </p>
 
           {/* Search */}
-          <div className="mt-6 flex flex-col sm:flex-row gap-3">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -105,7 +170,28 @@ export default function Marketplace() {
                 className="pl-10 h-11 bg-white"
               />
             </div>
-            <Select value={selectedCity} onValueChange={setSelectedCity}>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Cidade ou bairro"
+                value={locationQuery}
+                onChange={(e) => handleLocationChange(e.target.value)}
+                data-testid="marketplace-location-input"
+                className="pl-10 h-11 bg-white"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleUseLocation}
+              disabled={locating}
+              className="h-11 gap-2"
+              data-testid="marketplace-use-location"
+            >
+              <MapPin className="h-4 w-4" />
+              {locating ? "Localizando..." : "Minha localizacao"}
+            </Button>
+            <Select value={selectedCity} onValueChange={handleCitySelect}>
               <SelectTrigger className="w-full sm:w-48 h-11 bg-white" data-testid="marketplace-city-filter">
                 <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Cidade" />
@@ -119,7 +205,7 @@ export default function Marketplace() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <Select value={selectedCategory} onValueChange={(value) => setSelectedCategory(value === "all" ? "" : value)}>
               <SelectTrigger className="w-full sm:w-48 h-11 bg-white" data-testid="marketplace-category-filter">
                 <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Categoria" />
@@ -134,6 +220,54 @@ export default function Marketplace() {
               </SelectContent>
             </Select>
           </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
+            <Button
+              variant={showOffersOnly ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setShowOffersOnly((prev) => !prev)}
+              className="gap-2 shrink-0"
+              data-testid="marketplace-offers-toggle"
+            >
+              <Zap className="h-4 w-4" />
+              Ofertas turbo
+            </Button>
+            <Button
+              variant={user?.city && selectedCity === user.city ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => handleCitySelect(user?.city || "")}
+              className="gap-2 shrink-0"
+              disabled={!user?.city}
+              data-testid="marketplace-my-city"
+            >
+              <MapPin className="h-4 w-4" />
+              Minha cidade
+            </Button>
+            {topCategories.map((c) => (
+              <Button
+                key={c.name}
+                variant={selectedCategory === c.name ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCategory(selectedCategory === c.name ? "" : c.name)}
+                className="shrink-0"
+                data-testid={`quick-category-${c.name}`}
+              >
+                {c.name}
+              </Button>
+            ))}
+            {topCities.map((c) => (
+              <Button
+                key={c.city}
+                variant={selectedCity === c.city ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setSelectedCity(selectedCity === c.city ? "" : c.city)}
+                className="shrink-0"
+                data-testid={`quick-city-${c.city}`}
+              >
+                {c.city}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -143,15 +277,25 @@ export default function Marketplace() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map((i) => <div key={i} className="h-48 bg-muted rounded-xl animate-pulse" />)}
           </div>
-        ) : professionals.length === 0 ? (
+        ) : visibleProfessionals.length === 0 ? (
           <div className="text-center py-16">
-            <Search className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-            <h2 className="font-heading text-xl font-semibold">Nenhum profissional encontrado</h2>
-            <p className="text-muted-foreground mt-2">Tente ajustar sua busca ou filtros.</p>
+            {showOffersOnly ? (
+              <>
+                <Zap className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                <h2 className="font-heading text-xl font-semibold">Nenhuma oferta turbo ativa</h2>
+                <p className="text-muted-foreground mt-2">Tente remover o filtro ou ajustar sua busca.</p>
+              </>
+            ) : (
+              <>
+                <Search className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
+                <h2 className="font-heading text-xl font-semibold">Nenhum profissional encontrado</h2>
+                <p className="text-muted-foreground mt-2">Tente ajustar sua busca ou filtros.</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {professionals.map((pro, i) => (
+            {visibleProfessionals.map((pro, i) => (
               <Card key={pro.user_id} className="shadow-soft stagger-item hover:shadow-md transition-all hover:-translate-y-1 group" data-testid={`marketplace-card-${i}`}>
                 <CardContent className="pt-5 pb-4">
                   <div className="flex items-start gap-3 mb-3">

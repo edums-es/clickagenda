@@ -27,7 +27,7 @@ export default function AuthCallback() {
       try {
         const data = await googleAuth(sessionId);
         toast.success(`Bem-vindo, ${data.user.name}!`);
-        navigate("/dashboard", { replace: true, state: { user: data.user } });
+        navigate(data.user?.role === "client" ? "/cliente" : "/dashboard", { replace: true, state: { user: data.user } });
       } catch (err) {
         toast.error("Erro ao processar login com Google");
         navigate("/login", { replace: true });

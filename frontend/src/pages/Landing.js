@@ -42,10 +42,34 @@ const steps = [
   { num: "03", title: "Receba", desc: "Clientes agendam sozinhos. Voce recebe a notificacao e gerencia tudo." },
 ];
 
+const plans = [
+  {
+    name: "Start",
+    price: "Gratis",
+    desc: "Para testar a agenda e receber seus primeiros agendamentos.",
+    features: ["Pagina publica personalizada", "Lembretes por WhatsApp", "Agenda basica"],
+  },
+  {
+    name: "Pro",
+    price: "R$ 49",
+    desc: "Para profissionais com agenda cheia e recorrencia.",
+    features: ["Tudo do Start", "Servicos em destaque", "Relatorios essenciais"],
+    highlight: true,
+  },
+  {
+    name: "Studio",
+    price: "R$ 99",
+    desc: "Para equipes e negocios com varios profissionais.",
+    features: ["Tudo do Pro", "Equipe multipla", "Suporte prioritario"],
+  },
+];
+
 export default function Landing() {
   const { user, loading } = useAuth();
 
-  if (!loading && user) return <Navigate to="/dashboard" replace />;
+  if (!loading && user) {
+    return <Navigate to={user.role === "client" ? "/cliente" : "/dashboard"} replace />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -57,6 +81,11 @@ export default function Landing() {
             <span className="font-heading font-bold text-xl tracking-tight">Click Agenda</span>
           </div>
           <div className="flex items-center gap-3">
+            <Link to="/planos">
+              <Button variant="ghost" className="text-sm">
+                Planos
+              </Button>
+            </Link>
             <Link to="/login">
               <Button variant="ghost" data-testid="landing-login-btn" className="text-sm">
                 Entrar
@@ -178,6 +207,60 @@ export default function Landing() {
                 <span className="font-heading text-5xl font-bold text-primary/20">{s.num}</span>
                 <h3 className="font-heading text-xl font-semibold mt-2">{s.title}</h3>
                 <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="planos" className="py-16 md:py-24 px-4 md:px-8 bg-card" data-testid="pricing-section">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-12 md:mb-16">
+            <h2 className="font-heading text-3xl md:text-4xl font-semibold tracking-tight">
+              Planos e precos
+            </h2>
+            <p className="mt-3 text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
+              Escolha o plano ideal e evolua conforme seu negocio cresce.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {plans.map((plan) => (
+              <div
+                key={plan.name}
+                className={`rounded-2xl border p-6 bg-background transition-all ${
+                  plan.highlight ? "border-primary shadow-float" : "border-border hover:shadow-md"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">{plan.name}</p>
+                  {plan.highlight && (
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-primary font-semibold">
+                      Popular
+                    </span>
+                  )}
+                </div>
+                <p className="text-3xl font-bold mt-3">
+                  {plan.price}
+                  {plan.price !== "Gratis" && <span className="text-sm text-muted-foreground">/mes</span>}
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">{plan.desc}</p>
+                <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+                  {plan.features.map((feat) => (
+                    <li key={feat} className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                      {feat}
+                    </li>
+                  ))}
+                </ul>
+                <Link to="/register">
+                  <Button
+                    size="sm"
+                    className={`w-full mt-6 ${plan.highlight ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
+                    variant={plan.highlight ? "default" : "outline"}
+                  >
+                    Comecar agora
+                  </Button>
+                </Link>
               </div>
             ))}
           </div>

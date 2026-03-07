@@ -9,8 +9,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CalendarDays, Clock, MapPin, ArrowRight } from "lucide-react";
 
 const statusLabels = {
-  scheduled: "Agendado", confirmed: "Confirmado", arrived: "Chegou",
-  in_progress: "Atendendo", completed: "Concluido", cancelled: "Cancelado", no_show: "Faltou",
+  scheduled: "Aguardando confirmacao",
+  confirmed: "Confirmado",
+  arrived: "Chegou",
+  in_progress: "Atendendo",
+  completed: "Concluido",
+  cancelled: "Cancelado",
+  no_show: "Faltou",
+};
+
+const statusHints = {
+  scheduled: "Aguardando confirmacao do profissional",
+  confirmed: "Confirmado pelo profissional",
+  cancelled: "Agendamento cancelado",
 };
 
 export default function ClientAppointments() {
@@ -85,6 +96,9 @@ export default function ClientAppointments() {
                       </p>
                       {apt.service_price > 0 && (
                         <p className="text-xs text-muted-foreground mt-0.5">R$ {apt.service_price?.toFixed(2)}</p>
+                      )}
+                      {statusHints[apt.status] && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">{statusHints[apt.status]}</p>
                       )}
                     </div>
                   </div>

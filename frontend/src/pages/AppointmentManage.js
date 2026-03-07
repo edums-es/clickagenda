@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -6,11 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   CalendarDays,
-  Clock,
   MapPin,
   User,
-  Phone,
-  CheckCircle2,
   XCircle,
   Scissors,
   AlertCircle,
@@ -18,7 +15,7 @@ import {
 import { toast } from "sonner";
 
 const statusLabels = {
-  scheduled: "Agendado",
+  scheduled: "Aguardando confirmacao",
   confirmed: "Confirmado",
   arrived: "Chegou",
   in_progress: "Em atendimento",
@@ -34,11 +31,7 @@ export default function AppointmentManage() {
   const [error, setError] = useState(null);
   const [acting, setActing] = useState(false);
 
-  useEffect(() => {
-    loadAppointment();
-  }, [token]);
-
-  const loadAppointment = async () => {
+  const loadAppointment = useCallback(async () => {
     try {
       const res = await api.get(`/appointment/manage/${token}`);
       setData(res.data);
@@ -51,20 +44,11 @@ export default function AppointmentManage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
-  const handleConfirm = async () => {
-    setActing(true);
-    try {
-      await api.post(`/appointment/manage/${token}/confirm`);
-      toast.success("Agendamento confirmado!");
-      loadAppointment();
-    } catch (err) {
-      toast.error(err.response?.data?.detail || "Erro ao confirmar");
-    } finally {
-      setActing(false);
-    }
-  };
+  useEffect(() => {
+    loadAppointment();
+  }, [loadAppointment]);
 
   const handleCancel = async () => {
     if (!window.confirm("Tem certeza que deseja cancelar este agendamento?")) return;
@@ -101,36 +85,49 @@ export default function AppointmentManage() {
   }
 
   const { appointment: apt, professional: pro } = data;
-  const canConfirm = ["scheduled"].includes(apt.status);
   const canCancel = ["scheduled", "confirmed"].includes(apt.status);
   const isFinal = ["completed", "cancelled", "no_show"].includes(apt.status);
 
   return (
     <div className="min-h-screen bg-background" data-testid="appointment-manage-page">
-      <div className="max-w-lg mx-auto px-4 py-12">
-        <div className="text-center mb-8">
+      <div className="bg-gradient-to-r from-rose-50 to-teal-50 border-b border-border">
+        <div className="max-w-lg mx-auto px-4 py-10 text-center">
           <CalendarDays className="h-10 w-10 text-primary mx-auto mb-3" />
           <h1 className="font-heading text-2xl font-bold">Seu agendamento</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {pro.business_name || pro.name}
           </p>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <Badge
+              variant="outline"
+              className={`status-badge status-${apt.status} text-sm px-4 py-1`}
+              data-testid="appointment-status"
+            >
+              {statusLabels[apt.status] || apt.status}
+            </Badge>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 text-left">
+            <div className="rounded-lg border border-border/70 bg-white/70 p-3">
+              <p className="text-xs text-muted-foreground">Data</p>
+              <p className="text-sm font-medium">{apt.date}</p>
+            </div>
+            <div className="rounded-lg border border-border/70 bg-white/70 p-3">
+              <p className="text-xs text-muted-foreground">Horario</p>
+              <p className="text-sm font-medium">{apt.start_time} - {apt.end_time}</p>
+            </div>
+          </div>
+          {apt.status === "scheduled" && (
+            <p className="text-xs text-muted-foreground mt-3">
+              Aguardando confirmacao do profissional.
+            </p>
+          )}
         </div>
+      </div>
 
+      <div className="max-w-lg mx-auto px-4 py-10">
         <Card className="shadow-soft" data-testid="appointment-details-card">
           <CardContent className="pt-6 space-y-4">
-            {/* Status */}
-            <div className="text-center">
-              <Badge
-                variant="outline"
-                className={`status-badge status-${apt.status} text-sm px-4 py-1`}
-                data-testid="appointment-status"
-              >
-                {statusLabels[apt.status] || apt.status}
-              </Badge>
-            </div>
-
-            {/* Details */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <Scissors className="h-4 w-4 text-primary shrink-0" />
                 <div>
@@ -139,14 +136,6 @@ export default function AppointmentManage() {
                     <p className="text-xs text-muted-foreground">R$ {apt.service_price.toFixed(2)}</p>
                   )}
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <CalendarDays className="h-4 w-4 text-primary shrink-0" />
-                <p className="text-sm">{apt.date}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Clock className="h-4 w-4 text-primary shrink-0" />
-                <p className="text-sm">{apt.start_time} - {apt.end_time}</p>
               </div>
               <div className="flex items-center gap-3">
                 <User className="h-4 w-4 text-primary shrink-0" />
@@ -165,20 +154,8 @@ export default function AppointmentManage() {
               )}
             </div>
 
-            {/* Actions */}
             {!isFinal && (
               <div className="flex gap-3 pt-4">
-                {canConfirm && (
-                  <Button
-                    onClick={handleConfirm}
-                    disabled={acting}
-                    data-testid="confirm-appointment-btn"
-                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Confirmar
-                  </Button>
-                )}
                 {canCancel && (
                   <Button
                     variant="outline"
@@ -188,7 +165,7 @@ export default function AppointmentManage() {
                     className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10 gap-2"
                   >
                     <XCircle className="h-4 w-4" />
-                    Cancelar
+                    Cancelar agendamento
                   </Button>
                 )}
               </div>
@@ -200,7 +177,6 @@ export default function AppointmentManage() {
               </p>
             )}
 
-            {/* Cancellation policy */}
             {!isFinal && pro.cancellation_policy_hours && (
               <p className="text-xs text-muted-foreground text-center pt-2">
                 Cancelamento permitido ate {pro.cancellation_policy_hours}h antes do horario agendado.

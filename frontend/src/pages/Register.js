@@ -1,21 +1,39 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { CalendarDays, User, Mail, Lock, Briefcase, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Register() {
-  const { register } = useAuth();
+  const { register, updateUser } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", business_name: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", business_name: "", role: "professional" });
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+
+  useEffect(() => {
+    const raw = localStorage.getItem("pending_client_register");
+    if (!raw) return;
+    try {
+      const pending = JSON.parse(raw);
+      setForm((p) => ({
+        ...p,
+        name: pending.name || p.name,
+        email: pending.email || p.email,
+        role: "client",
+      }));
+    } catch {
+      return;
+    }
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,9 +43,25 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      await register(form);
+      const data = await register(form);
+      const raw = localStorage.getItem("pending_client_register");
+      if (raw) {
+        try {
+          const pending = JSON.parse(raw);
+          const profilePayload = {};
+          if (pending.phone) profilePayload.phone = pending.phone;
+          if (pending.name && !data?.user?.name) profilePayload.name = pending.name;
+          if (Object.keys(profilePayload).length > 0) {
+            const profileRes = await api.put("/profile", profilePayload);
+            updateUser(profileRes.data);
+          }
+          localStorage.removeItem("pending_client_register");
+        } catch {
+          localStorage.removeItem("pending_client_register");
+        }
+      }
       toast.success("Conta criada com sucesso!");
-      navigate("/dashboard");
+      navigate(data?.user?.role === "client" ? "/cliente" : "/dashboard");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro ao criar conta");
     } finally {
@@ -37,7 +71,7 @@ export default function Register() {
 
   const handleGoogleLogin = () => {
     // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/dashboard";
+    const redirectUrl = window.location.origin + "/auth/callback";
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
 
@@ -95,12 +129,31 @@ export default function Register() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="business_name">Nome do negocio (opcional)</Label>
-                <div className="relative">
-                  <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input id="business_name" name="business_name" placeholder="Meu Salao" value={form.business_name} onChange={handleChange} data-testid="register-business-input" className="pl-10" />
-                </div>
+                <Label>Tipo de conta</Label>
+                <RadioGroup
+                  value={form.role}
+                  onValueChange={(value) => setForm((p) => ({ ...p, role: value }))}
+                  className="grid grid-cols-2 gap-3"
+                >
+                  <label className="flex items-center gap-2 rounded-lg border border-border p-3 cursor-pointer">
+                    <RadioGroupItem value="professional" id="role-professional" />
+                    <span className="text-sm font-medium">Profissional</span>
+                  </label>
+                  <label className="flex items-center gap-2 rounded-lg border border-border p-3 cursor-pointer">
+                    <RadioGroupItem value="client" id="role-client" />
+                    <span className="text-sm font-medium">Cliente</span>
+                  </label>
+                </RadioGroup>
               </div>
+              {form.role === "professional" && (
+                <div className="space-y-2">
+                  <Label htmlFor="business_name">Nome do negocio (opcional)</Label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input id="business_name" name="business_name" placeholder="Meu Salao" value={form.business_name} onChange={handleChange} data-testid="register-business-input" className="pl-10" />
+                  </div>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="password">Senha</Label>
                 <div className="relative">

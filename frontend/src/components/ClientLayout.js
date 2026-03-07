@@ -103,8 +103,8 @@ export default function ClientLayout({ children }) {
         </Sheet>
         <span className="font-heading font-bold text-primary text-lg">Click Agenda</span>
       </div>
-      <main className="flex-1 md:ml-64 pt-16 md:pt-0">
-        <div className="p-4 md:p-8 max-w-7xl mx-auto animate-fade-in">{children}</div>
+      <main className="flex-1 md:ml-64 pt-16 md:pt-0 overflow-x-hidden">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto animate-fade-in w-full">{children}</div>
       </main>
     </div>
   );

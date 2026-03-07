@@ -11,8 +11,19 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const statusLabels = {
-  scheduled: "Agendado", confirmed: "Confirmado", arrived: "Chegou",
-  in_progress: "Atendendo", completed: "Concluido", cancelled: "Cancelado", no_show: "Faltou",
+  scheduled: "Aguardando confirmacao",
+  confirmed: "Confirmado",
+  arrived: "Chegou",
+  in_progress: "Atendendo",
+  completed: "Concluido",
+  cancelled: "Cancelado",
+  no_show: "Faltou",
+};
+
+const statusHints = {
+  scheduled: "Aguardando confirmacao do profissional",
+  confirmed: "Confirmado pelo profissional",
+  cancelled: "Agendamento cancelado",
 };
 
 export default function ClientDashboard() {
@@ -44,7 +55,7 @@ export default function ClientDashboard() {
   }
 
   return (
-    <div className="space-y-6" data-testid="client-dashboard-page">
+    <div className="space-y-6 overflow-x-hidden" data-testid="client-dashboard-page">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
           <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">
@@ -53,14 +64,14 @@ export default function ClientDashboard() {
           <p className="text-sm text-muted-foreground capitalize mt-1">{today}</p>
         </div>
         <Link to="/marketplace">
-          <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2" data-testid="go-marketplace-btn">
+          <Button className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 w-full sm:w-auto" data-testid="go-marketplace-btn">
             <Search className="h-4 w-4" /> Buscar profissionais
           </Button>
         </Link>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="shadow-soft" data-testid="stat-appointments">
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-3">
@@ -105,7 +116,7 @@ export default function ClientDashboard() {
       {/* Upcoming */}
       <Card className="shadow-soft" data-testid="client-upcoming-card">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <CardTitle className="font-heading text-lg">Proximos agendamentos</CardTitle>
             <Link to="/cliente/agendamentos">
               <Button variant="ghost" size="sm" className="text-xs gap-1" data-testid="view-all-apts">
@@ -128,26 +139,31 @@ export default function ClientDashboard() {
           ) : (
             <div className="space-y-3">
               {data.upcoming.map((apt, i) => (
-                <div key={apt.appointment_id} className="stagger-item flex items-center gap-4 p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors" data-testid={`client-upcoming-${i}`}>
+                <div key={apt.appointment_id} className="stagger-item flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors" data-testid={`client-upcoming-${i}`}>
                   <div className="text-center shrink-0 w-14">
                     <p className="text-sm font-semibold">{apt.start_time}</p>
                     <p className="text-xs text-muted-foreground">{apt.date}</p>
                   </div>
-                  <Separator orientation="vertical" className="h-10" />
+                  <Separator orientation="vertical" className="h-10 hidden sm:block" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{apt.service_name}</p>
                     <p className="text-xs text-muted-foreground truncate">
                       {apt.professional?.business_name || apt.professional?.name}
                     </p>
+                    {statusHints[apt.status] && (
+                      <p className="text-xs text-muted-foreground truncate">{statusHints[apt.status]}</p>
+                    )}
                   </div>
-                  <Badge variant="outline" className={`status-badge status-${apt.status} text-xs shrink-0`}>
-                    {statusLabels[apt.status] || apt.status}
-                  </Badge>
-                  {apt.token && (
-                    <Link to={`/agendamento/${apt.token}`}>
-                      <Button variant="ghost" size="sm" className="text-xs" data-testid={`manage-apt-${i}`}>Gerenciar</Button>
-                    </Link>
-                  )}
+                  <div className="flex items-center gap-2 sm:justify-end w-full sm:w-auto">
+                    <Badge variant="outline" className={`status-badge status-${apt.status} text-xs shrink-0`}>
+                      {statusLabels[apt.status] || apt.status}
+                    </Badge>
+                    {apt.token && (
+                      <Link to={`/agendamento/${apt.token}`} className="flex-1 sm:flex-none">
+                        <Button variant="ghost" size="sm" className="text-xs w-full sm:w-auto" data-testid={`manage-apt-${i}`}>Gerenciar</Button>
+                      </Link>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -164,11 +180,11 @@ export default function ClientDashboard() {
           <CardContent>
             <div className="space-y-2">
               {data.recent.slice(0, 5).map((apt, i) => (
-                <div key={apt.appointment_id} className="flex items-center gap-3 py-2 text-sm" data-testid={`client-recent-${i}`}>
-                  <span className="text-muted-foreground w-20 shrink-0">{apt.date}</span>
-                  <span className="flex-1 truncate">{apt.service_name}</span>
-                  <span className="text-xs text-muted-foreground truncate">{apt.professional?.business_name || apt.professional?.name}</span>
-                  <Badge variant="outline" className={`status-badge status-${apt.status} text-[10px]`}>
+                <div key={apt.appointment_id} className="flex flex-col sm:flex-row sm:items-center gap-2 py-2 text-sm" data-testid={`client-recent-${i}`}>
+                  <span className="text-muted-foreground sm:w-20 sm:shrink-0">{apt.date}</span>
+                  <span className="flex-1 min-w-0 truncate">{apt.service_name}</span>
+                  <span className="text-xs text-muted-foreground min-w-0 truncate">{apt.professional?.business_name || apt.professional?.name}</span>
+                  <Badge variant="outline" className={`status-badge status-${apt.status} text-[10px] sm:shrink-0`}>
                     {statusLabels[apt.status]}
                   </Badge>
                 </div>

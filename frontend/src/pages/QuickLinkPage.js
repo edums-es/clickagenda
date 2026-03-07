@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -29,16 +29,16 @@ export default function QuickLinkPage() {
   const [booking, setBooking] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
 
-  useEffect(() => { loadLink(); }, [code]);
-
-  const loadLink = async () => {
+  const loadLink = useCallback(async () => {
     try {
       const res = await api.get(`/ql/${code}`);
       setData(res.data);
     } catch (err) {
       setError(err.response?.status === 410 ? "Este link expirou ou atingiu o limite de usos" : "Link nao encontrado");
     } finally { setLoading(false); }
-  };
+  }, [code]);
+
+  useEffect(() => { loadLink(); }, [loadLink]);
 
   const loadSlots = async (date) => {
     if (!data?.professional?.slug || !data?.service?.service_id) return;
