@@ -193,7 +193,7 @@ export default function Dashboard() {
     );
   }
 
-  const confirmationRate = Math.round((stats?.confirmation_rate || 0) * 100);
+  const confirmationRate = stats?.confirmation_rate || 0;
 
   return (
     <div className="space-y-8 font-sans pb-10" data-testid="dashboard-page">
@@ -285,19 +285,16 @@ export default function Dashboard() {
       </Dialog>
 
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="shadow-sm border-border/50 rounded-2xl flex flex-col justify-between">
           <CardContent className="p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="h-10 w-10 rounded-xl bg-[#00D49D]/10 flex items-center justify-center shrink-0">
                 <CalendarDays className="h-5 w-5 text-[#00D49D]" />
               </div>
-              <Badge variant="secondary" className="bg-[#00D49D]/10 text-[#00D49D] hover:bg-[#00D49D]/10 font-bold border-transparent text-[11px] px-2 py-0.5">
-                +12%
-              </Badge>
             </div>
-            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Agendamentos do dia</p>
-            <p className="text-3xl font-black font-heading text-foreground">{stats?.total_today || 0}</p>
+            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Agendamentos Hoje</p>
+            <p className="text-3xl font-black font-heading text-foreground">{stats?.appointments_today || 0}</p>
           </CardContent>
         </Card>
         
@@ -307,11 +304,8 @@ export default function Dashboard() {
               <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
                 <CheckCircle2 className="h-5 w-5 text-blue-500" />
               </div>
-              <Badge variant="secondary" className="bg-blue-50 text-blue-600 hover:bg-blue-50 font-bold border-transparent text-[11px] px-2 py-0.5">
-                +5%
-              </Badge>
             </div>
-            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Taxa de confirmacao</p>
+            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Taxa de Confirmação (30d)</p>
             <p className="text-3xl font-black font-heading text-foreground">{confirmationRate}%</p>
           </CardContent>
         </Card>
@@ -326,23 +320,8 @@ export default function Dashboard() {
                 Mensal
               </Badge>
             </div>
-            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Faturamento Estimado</p>
-            <p className="text-3xl font-black font-heading text-foreground">R$ {(stats?.revenue_period || 0).toFixed(0)}</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-border/50 rounded-2xl flex flex-col justify-between">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="h-10 w-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
-                <Users className="h-5 w-5 text-orange-500" />
-              </div>
-              <Badge variant="secondary" className="bg-red-50 text-red-500 hover:bg-red-50 font-bold border-transparent text-[11px] px-2 py-0.5">
-                -2%
-              </Badge>
-            </div>
-            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Visitas no Link</p>
-            <p className="text-3xl font-black font-heading text-foreground">248</p>
+            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Faturamento Mês Atual</p>
+            <p className="text-3xl font-black font-heading text-foreground">R$ {(stats?.monthly_revenue || 0).toFixed(2).replace(".", ",")}</p>
           </CardContent>
         </Card>
       </div>
@@ -382,7 +361,7 @@ export default function Dashboard() {
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-border/30">
-                     {(!stats?.today_appointments?.length) ? (
+                     {(!stats?.recent_appointments?.length) ? (
                         <tr>
                           <td colSpan="5" className="text-center py-16 px-4">
                             <CalendarDays className="h-8 w-8 mx-auto text-muted-foreground/30 mb-3" />
@@ -390,16 +369,16 @@ export default function Dashboard() {
                           </td>
                         </tr>
                      ) : (
-                       stats.today_appointments.map((apt) => {
+                       stats.recent_appointments.map((apt) => {
                          const aptInitials = apt.client_name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
                          
                          let badgeClasses = "bg-neutral-100 text-neutral-600";
-                         if (apt.status === "confirmed") badgeClasses = "bg-emerald-50 text-emerald-600";
-                         else if (apt.status === "scheduled") badgeClasses = "bg-blue-50 text-blue-600";
-                         else if (apt.status === "cancelled") badgeClasses = "bg-red-50 text-red-600";
+                         if (apt.status === "confirmed" || apt.status === "completed") badgeClasses = "bg-emerald-50 text-emerald-600";
+                         else if (apt.status === "pending" || apt.status === "scheduled") badgeClasses = "bg-blue-50 text-blue-600";
+                         else if (apt.status === "cancelled" || apt.status === "no_show") badgeClasses = "bg-red-50 text-red-600";
                          
                          return (
-                           <tr key={apt.appointment_id} className="hover:bg-neutral-50/70 transition-colors bg-white">
+                           <tr key={apt._id} className="hover:bg-neutral-50/70 transition-colors bg-white">
                              <td className="px-6 py-4">
                                <div className="flex items-center gap-3">
                                  <Avatar className="h-[34px] w-[34px]">
@@ -409,7 +388,7 @@ export default function Dashboard() {
                                </div>
                              </td>
                              <td className="px-6 py-4 font-semibold text-[#64748B] text-[13px]">{apt.service_name}</td>
-                             <td className="px-6 py-4 font-semibold text-[#64748B] text-[13px]">{apt.start_time} - {apt.end_time}</td>
+                             <td className="px-6 py-4 font-semibold text-[#64748B] text-[13px]">{apt.date} as {apt.start_time}</td>
                              <td className="px-6 py-4">
                                <Badge variant="outline" className={`status-badge text-[9px] px-2 py-0.5 font-bold tracking-widest border-transparent uppercase ${badgeClasses}`}>
                                  {statusLabels[apt.status] || apt.status}
@@ -444,23 +423,23 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="p-0 flex-1 bg-white rounded-b-2xl">
               <div className="divide-y divide-border/30 h-full">
-                {!stats?.upcoming?.length ? (
+                {!stats?.upcoming_clients?.length ? (
                   <div className="py-12 px-4 flex flex-col items-center text-center">
                      <Clock className="h-8 w-8 text-muted-foreground/30 mb-3" />
                      <p className="text-[13px] font-medium text-[#64748B]">Sua agenda futura esta livre no momento.</p>
                   </div>
                 ) : (
-                  stats.upcoming.slice(0,5).map((apt, i) => {
+                  stats.upcoming_clients.map((apt, i) => {
                     const aptInitials = apt.client_name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
                     return (
-                      <div key={apt.appointment_id} className="flex items-center justify-between p-5 hover:bg-neutral-50/70 transition-colors">
+                      <div key={apt._id} className="flex items-center justify-between p-5 hover:bg-neutral-50/70 transition-colors">
                         <div className="flex items-center gap-3.5">
                            <Avatar className="h-[42px] w-[42px]">
                              <AvatarFallback className="bg-primary/5 text-primary text-[12px] font-bold">{aptInitials}</AvatarFallback>
                            </Avatar>
                            <div>
                              <p className="font-bold text-[14px] leading-snug text-foreground">{apt.client_name}</p>
-                             <p className="text-[12px] text-[#64748B] font-semibold mt-0.5">{apt.start_time} • {apt.service_name}</p>
+                             <p className="text-[12px] text-[#64748B] font-semibold mt-0.5">{apt.date} as {apt.start_time} • {apt.service_name}</p>
                            </div>
                         </div>
                         {apt.client_phone && (

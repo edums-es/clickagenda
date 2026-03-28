@@ -21,6 +21,7 @@ import resend
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+import pytz
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -378,7 +379,9 @@ async def calculate_slots(user_id: str, date_str: str, service_id: str):
         return []
 
     slots = []
-    now = datetime.now(timezone.utc)
+    BR_TZ = pytz.timezone("America/Sao_Paulo")
+    now_br = datetime.now(BR_TZ)
+    cutoff = now_br + timedelta(hours=min_advance)
 
     for rule in rules:
         start = time_to_minutes(rule["start_time"])
@@ -407,12 +410,13 @@ async def calculate_slots(user_id: str, date_str: str, service_id: str):
                         break
 
                 if not overlaps_apt:
-                    slot_dt = date_obj.replace(
+                    slot_unaware = date_obj.replace(
                         hour=slot_start // 60,
-                        minute=slot_start % 60,
-                        tzinfo=timezone.utc
+                        minute=slot_start % 60
                     )
-                    if slot_dt > now + timedelta(hours=max(0, min_advance - 3)):
+                    slot_dt = BR_TZ.localize(slot_unaware)
+                    
+                    if slot_dt > cutoff:
                         slots.append({
                             "start_time": minutes_to_time(slot_start),
                             "end_time": minutes_to_time(slot_end)
@@ -2209,7 +2213,339 @@ async def whatsapp_webhook(user_id: str, request: Request):
     return {"status": "ok"}
 
 
+# ==================== REVIEWS ====================
+
+class ReviewSubmit(BaseModel):
+    rating: int
+    comment: Optional[str] = ""
+
+@api_router.post("/cron/send-review-invites")
+async def cron_send_review_invites(req: Request):
+    BR_TZ = pytz.timezone("America/Sao_Paulo")
+    agora = datetime.now(BR_TZ)
+    ontem = agora - timedelta(days=1)
+    
+    ontem_str = ontem.strftime("%Y-%m-%d")
+    hoje_str = agora.strftime("%Y-%m-%d")
+
+    apts = await db.appointments.find({
+        "status": {"$in": ["completed"]},
+        "date": {"$in": [ontem_str, hoje_str]},
+        "review_invited": {"$ne": True},
+        "client_email": {"$ne": ""}
+    }).to_list(100)
+    
+    if not EMAIL_ENABLED or len(apts) == 0:
+        return {"msg": "Sem convites aptos ou email desativado.", "count": len(apts)}
+        
+    invited = 0
+    for apt in apts:
+        apt_id = str(apt["_id"])
+        
+        prof = await db.users.find_one({"user_id": apt["user_id"]})
+        if not prof: continue
+        
+        prof_name = prof.get("name", "Profissional")
+        link = f"{FRONTEND_URL}/avaliar/{apt_id}"
+        
+        html_body = f"""
+        <div style="font-family: sans-serif; max-w-md; margin: auto; padding: 20px;">
+            <h2>Olá, {apt.get('client_name', 'Cliente')}!</h2>
+            <p>Como foi o seu atendimento com <strong>{prof_name}</strong>?</p>
+            <p>Ajude-nos a melhorar avaliando a sua experiência.</p>
+            <br/>
+            <a href="{link}" style="background: #00D49D; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                Avaliar Atendimento
+            </a>
+            <br/><br/>
+            <p>Obrigado!</p>
+        </div>
+        """
+        
+        try:
+            resend.Emails.send({
+                "from": EMAIL_FROM,
+                "to": apt["client_email"],
+                "subject": f"Como foi o seu atendimento com {prof_name}?",
+                "html": html_body
+            })
+            await db.appointments.update_one(
+                {"_id": apt["_id"]},
+                {"$set": {"review_invited": True}}
+            )
+            invited += 1
+        except Exception as e:
+            logger.error(f"Erro ao enviar review p/ {apt.get('client_email', '')}: {e}")
+            
+    return {"msg": "Convites processados", "invited_count": invited}
+
+@api_router.get("/reviews/appointment/{appointment_id}")
+async def get_appointment_for_review(appointment_id: str):
+    from bson.objectid import ObjectId
+    try:
+        obj_id = ObjectId(appointment_id)
+    except:
+        raise HTTPException(400, "ID inválido")
+        
+    apt = await db.appointments.find_one({"_id": obj_id})
+    if not apt:
+        raise HTTPException(404, "Agendamento não encontrado")
+        
+    prof = await db.users.find_one({"user_id": apt["user_id"]})
+    prof_name = prof.get("name", "Profissional") if prof else "Profissional"
+    
+    # get service name
+    svc = await db.services.find_one({"service_id": apt.get("service_id", ""), "user_id": apt["user_id"]})
+    svc_name = svc.get("name", apt.get("service_name", "Serviço")) if svc else "Serviço"
+    
+    return {
+        "client_name": apt.get("client_name", "Cliente"),
+        "service_name": svc_name,
+        "professional_name": prof_name,
+        "professional_picture": prof.get("picture", "") if prof else "",
+        "date": apt["date"],
+        "status": apt["status"]
+    }
+
+@api_router.post("/reviews/{appointment_id}")
+async def submit_review(appointment_id: str, data: ReviewSubmit):
+    from bson.objectid import ObjectId
+    try:
+        obj_id = ObjectId(appointment_id)
+    except:
+        raise HTTPException(400, "ID inválido")
+        
+    apt = await db.appointments.find_one({"_id": obj_id})
+    if not apt:
+        raise HTTPException(404, "Agendamento não encontrado")
+        
+    existing = await db.reviews.find_one({"appointment_id": appointment_id})
+    if existing:
+        raise HTTPException(400, "Agendamento já avaliado")
+        
+    review_doc = {
+        "appointment_id": appointment_id,
+        "user_id": apt["user_id"],
+        "client_name": apt.get("client_name", "Cliente"),
+        "rating": data.rating,
+        "comment": data.comment,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.reviews.insert_one(review_doc)
+    return {"msg": "Avaliação salva com sucesso"}
+
+
+# ==================== N8N INTEGRATION ====================
+
+class N8NConfigUpdate(BaseModel):
+    n8n_url: Optional[str] = ""
+    n8n_api_key: Optional[str] = ""
+    whatsapp_number: Optional[str] = ""
+    is_active: bool = False
+    ai_prompt: Optional[str] = ""
+
+@api_router.get("/whatsapp/config")
+async def get_whatsapp_config(user: dict = Depends(get_current_user)):
+    conf = await db.whatsapp_config.find_one({"user_id": user["user_id"]})
+    if not conf:
+        return {"n8n_url": "", "n8n_api_key": "", "whatsapp_number": "", "is_active": False, "ai_prompt": "", "webhook_url": f"https://clickagenda-production.up.railway.app/api/n8n/{user['user_id']}/book"}
+    conf["_id"] = str(conf["_id"])
+    conf["webhook_url"] = f"https://clickagenda-production.up.railway.app/api/n8n/{user['user_id']}/book"
+    return conf
+
+@api_router.post("/whatsapp/config")
+async def save_whatsapp_config(data: N8NConfigUpdate, user: dict = Depends(get_current_user)):
+    user_id = user["user_id"]
+    conf = await db.whatsapp_config.find_one({"user_id": user_id})
+    
+    api_key = data.n8n_api_key
+    if not api_key and (not conf or not conf.get("n8n_api_key")):
+        import secrets
+        api_key = secrets.token_urlsafe(32)
+    elif not api_key and conf:
+        api_key = conf.get("n8n_api_key")
+
+    update_doc = {
+        "n8n_url": data.n8n_url,
+        "n8n_api_key": api_key,
+        "whatsapp_number": data.whatsapp_number,
+        "is_active": data.is_active,
+        "ai_prompt": data.ai_prompt,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    if conf:
+        await db.whatsapp_config.update_one({"user_id": user_id}, {"$set": update_doc})
+    else:
+        update_doc["user_id"] = user_id
+        update_doc["created_at"] = update_doc["updated_at"]
+        await db.whatsapp_config.insert_one(update_doc)
+
+    return {"msg": "ConfigURAÇÕES salvas", "n8n_api_key": api_key}
+
+async def verify_n8n_key(req: Request, user_id: str):
+    key = req.headers.get("X-N8N-Key")
+    if not key:
+        raise HTTPException(401, "Missing X-N8N-Key header")
+    conf = await db.whatsapp_config.find_one({"user_id": user_id})
+    if not conf or conf.get("n8n_api_key") != key:
+        raise HTTPException(403, "Invalid N8N Key")
+    if not conf.get("is_active", False):
+        raise HTTPException(403, "Agent is disabled")
+    return conf
+
+@api_router.get("/n8n/{user_id}/services")
+async def n8n_get_services(user_id: str, req: Request):
+    await verify_n8n_key(req, user_id)
+    svcs = await db.services.find({"user_id": user_id, "active": True}).to_list(100)
+    for s in svcs:
+        s["_id"] = str(s["_id"])
+    return svcs
+
+@api_router.get("/n8n/{user_id}/slots")
+async def n8n_get_slots(user_id: str, req: Request, date: str, service_id: str):
+    await verify_n8n_key(req, user_id)
+    slots = await calculate_slots(user_id, service_id, date)
+    return {"slots": slots}
+
+@api_router.post("/n8n/{user_id}/book")
+async def n8n_book_appointment(user_id: str, req: Request, data: AppointmentCreate):
+    await verify_n8n_key(req, user_id)
+    
+    svc = await db.services.find_one({"service_id": data.service_id, "user_id": user_id}, {"_id": 0})
+    if not svc:
+        raise HTTPException(404, "Serviço não encontrado")
+
+    duration = svc["duration_minutes"]
+    start_mins = time_to_minutes(data.start_time)
+    end_mins = start_mins + duration
+    end_time = minutes_to_time(end_mins)
+
+    # Check for conflicts
+    existing = await db.appointments.find(
+        {"user_id": user_id, "date": data.date, "status": {"$nin": ["cancelled", "no_show"]}},
+        {"_id": 0}
+    ).to_list(1000)
+
+    for apt in existing:
+        apt_s = time_to_minutes(apt["start_time"])
+        apt_e = time_to_minutes(apt["end_time"])
+        if start_mins < apt_e and end_mins > apt_s:
+            raise HTTPException(409, "Horário indisponível para este serviço")
+
+    token = secrets.token_urlsafe(32)
+    appointment = {
+        "appointment_id": f"apt_{uuid.uuid4().hex[:8]}",
+        "user_id": user_id,
+        "service_id": data.service_id,
+        "service_name": svc["name"],
+        "service_price": svc.get("price", 0),
+        "client_name": data.client_name,
+        "client_phone": normalize_phone(data.client_phone),
+        "client_email": data.client_email,
+        "date": data.date,
+        "start_time": data.start_time,
+        "end_time": end_time,
+        "status": "scheduled",
+        "notes": data.notes or "Agendado via IA Chatbot",
+        "token": token,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+
+    await db.appointments.insert_one(appointment)
+    
+    # Notify (optional but good)
+    user = await db.users.find_one({"user_id": user_id})
+    await mock_send_whatsapp(user_id, appointment)
+    
+    return {"status": "success", "appointment_id": appointment["appointment_id"]}
+
+@api_router.get("/n8n/{user_id}/config")
+async def n8n_get_config(user_id: str, req: Request):
+    conf = await verify_n8n_key(req, user_id)
+    prof = await db.users.find_one({"user_id": user_id})
+    svcs = await db.services.find({"user_id": user_id, "active": True}).to_list(100)
+    return {
+        "professional_name": prof.get("name", ""),
+        "business_name": prof.get("business_name", ""),
+        "ai_prompt": conf.get("ai_prompt", ""),
+        "services": [{"id": s["service_id"], "name": s["name"], "price": s["price"], "duration": s["duration_minutes"]} for s in svcs]
+    }
+
+
 # ==================== ROOT ====================
+
+@api_router.get("/dashboard/stats")
+async def get_dashboard_stats(user: dict = Depends(get_current_user)):
+    user_id = user["user_id"]
+    
+    import pytz
+    BR_TZ = pytz.timezone("America/Sao_Paulo")
+    now_br = datetime.now(BR_TZ)
+    today_str = now_br.strftime("%Y-%m-%d")
+    
+    # 1. Appointments Today
+    today_apts = await db.appointments.count_documents({
+        "user_id": user_id,
+        "date": today_str,
+        "status": {"$in": ["confirmed", "completed", "pending"]}
+    })
+    
+    # 2. Confirmation Rate (últimos 30 dias)
+    thirty_days_ago = (now_br - timedelta(days=30)).strftime("%Y-%m-%d")
+    total_30d = await db.appointments.count_documents({
+        "user_id": user_id,
+        "date": {"$gte": thirty_days_ago}
+    })
+    confirmed_30d = await db.appointments.count_documents({
+        "user_id": user_id,
+        "date": {"$gte": thirty_days_ago},
+        "status": {"$in": ["confirmed", "completed"]}
+    })
+    conf_rate = (confirmed_30d / total_30d * 100) if total_30d > 0 else 0.0
+    
+    # 3. Monthly Revenue (mês atual)
+    start_of_month = now_br.replace(day=1).strftime("%Y-%m-%d")
+    current_month_apts = await db.appointments.find({
+        "user_id": user_id,
+        "date": {"$gte": start_of_month},
+        "status": {"$in": ["confirmed", "completed"]}
+    }).to_list(1000)
+    
+    monthly_revenue = 0.0
+    for apt in current_month_apts:
+        svc = await db.services.find_one({"service_id": apt.get("service_id", ""), "user_id": user_id})
+        if svc:
+            monthly_revenue += float(svc.get("price", 0))
+            
+    # 4. Recent Appointments
+    recent_apts = await db.appointments.find({"user_id": user_id}).sort([("created_at", -1)]).limit(10).to_list(10)
+    for apt in recent_apts:
+        apt["_id"] = str(apt["_id"])
+        svc = await db.services.find_one({"service_id": apt.get("service_id", ""), "user_id": user_id})
+        apt["service_name"] = svc.get("name", "Serviço") if svc else "Serviço Deletado"
+        
+    # 5. Upcoming Clients
+    upcoming = await db.appointments.find({
+        "user_id": user_id,
+        "date": {"$gte": today_str},
+        "status": {"$in": ["confirmed", "pending"]}
+    }).sort([("date", 1), ("start_time", 1)]).limit(5).to_list(5)
+    for apt in upcoming:
+        apt["_id"] = str(apt["_id"])
+        svc = await db.services.find_one({"service_id": apt.get("service_id", ""), "user_id": user_id})
+        apt["service_name"] = svc.get("name", "Serviço") if svc else "Serviço Deletado"
+        
+    return {
+        "appointments_today": today_apts,
+        "confirmation_rate": round(conf_rate, 1),
+        "monthly_revenue": round(monthly_revenue, 2),
+        "recent_appointments": recent_apts,
+        "upcoming_clients": upcoming
+    }
+
 
 @api_router.get("/")
 async def root():

@@ -444,9 +444,6 @@ export default function Settings() {
                 <CardContent>
                   <div className="rounded-xl border border-border overflow-hidden">
                     <div className="h-24 bg-gradient-to-br from-teal-50 to-stone-100 relative">
-                      {profile.cover_picture && (
-                        <img src={profile.cover_picture} alt="Foto de capa" className="h-full w-full object-cover" />
-                      )}
                     </div>
                     <div className="p-4 flex items-center gap-3">
                       <div className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
@@ -493,24 +490,6 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-3">
-                  <Label>Foto de capa</Label>
-                  <div className="space-y-2">
-                    <div className="h-28 w-full rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-                      {profile.cover_picture ? (
-                        <img src={profile.cover_picture} alt="Foto de capa" className="h-full w-full object-cover" />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Sem capa</span>
-                      )}
-                    </div>
-                    <Input type="file" accept="image/*" onChange={(e) => handleImageUpload("cover_picture", e.target.files?.[0])} disabled={uploading.cover_picture} />
-                    {profile.cover_picture && (
-                      <Button variant="outline" size="sm" onClick={() => setProfile((p) => ({ ...p, cover_picture: "" }))}>
-                        Remover
-                      </Button>
-                    )}
-                  </div>
-                </div>
               </CardContent>
             </Card>
             <Card className="shadow-soft">
@@ -520,21 +499,25 @@ export default function Settings() {
               <CardContent className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Instagram</Label>
-                  <Input value={profile.social_links?.instagram || ""} onChange={(e) => updateSocialLink("instagram", e.target.value)} placeholder="instagram.com/seuusuario" />
+                  <Input value={profile.social_links?.instagram || ""} onChange={(e) => updateSocialLink("instagram", e.target.value)} placeholder="@seuusuario" />
                 </div>
                 <div className="space-y-2">
                   <Label>Facebook</Label>
-                  <Input value={profile.social_links?.facebook || ""} onChange={(e) => updateSocialLink("facebook", e.target.value)} placeholder="facebook.com/suapagina" />
+                  <Input value={profile.social_links?.facebook || ""} onChange={(e) => updateSocialLink("facebook", e.target.value)} placeholder="Página ou Perfil" />
                 </div>
                 <div className="space-y-2">
                   <Label>TikTok</Label>
-                  <Input value={profile.social_links?.tiktok || ""} onChange={(e) => updateSocialLink("tiktok", e.target.value)} placeholder="tiktok.com/@seuusuario" />
+                  <Input value={profile.social_links?.tiktok || ""} onChange={(e) => updateSocialLink("tiktok", e.target.value)} placeholder="@seuusuario" />
                 </div>
                 <div className="space-y-2">
                   <Label>WhatsApp</Label>
-                  <Input value={profile.social_links?.whatsapp || ""} onChange={(e) => updateSocialLink("whatsapp", e.target.value)} placeholder="+55 11 99999-9999" />
+                  <Input value={profile.social_links?.whatsapp || ""} onChange={(e) => updateSocialLink("whatsapp", e.target.value)} placeholder="11999999999" />
                 </div>
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2">
+                  <Label>YouTube</Label>
+                  <Input value={profile.social_links?.youtube || ""} onChange={(e) => updateSocialLink("youtube", e.target.value)} placeholder="@seucanal" />
+                </div>
+                <div className="space-y-2">
                   <Label>Site</Label>
                   <Input value={profile.social_links?.website || ""} onChange={(e) => updateSocialLink("website", e.target.value)} placeholder="https://seusite.com" />
                 </div>

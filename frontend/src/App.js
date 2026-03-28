@@ -27,7 +27,7 @@ import PublicProfile from "@/pages/PublicProfile";
 import WhatsappIA from "@/pages/WhatsappIA";
 import BookingFlow from "@/pages/BookingFlow";
 import AppointmentManage from "@/pages/AppointmentManage";
-import ReviewPage from "@/pages/ReviewPage";
+import ClientReview from "@/pages/ClientReview";
 import DashboardLayout from "@/components/DashboardLayout";
 import ClientLayout from "@/components/ClientLayout";
 
@@ -70,7 +70,7 @@ function AppRouter() {
       <Route path="/p/:slug" element={<PublicProfile />} />
       <Route path="/p/:slug/agendar" element={<BookingFlow />} />
       <Route path="/agendamento/:token" element={<AppointmentManage />} />
-      <Route path="/avaliar/:token" element={<ReviewPage />} />
+      <Route path="/avaliar/:id" element={<ClientReview />} />
       <Route path="/marketplace" element={<Marketplace />} />
       <Route path="/ql/:code" element={<QuickLinkPage />} />
       <Route

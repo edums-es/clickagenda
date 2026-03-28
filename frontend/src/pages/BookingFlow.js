@@ -19,7 +19,12 @@ import {
   CalendarDays,
   Briefcase,
   Home,
-  MapPin
+  MapPin,
+  Instagram,
+  Facebook,
+  Youtube,
+  Globe,
+  Video
 } from "lucide-react";
 import { format, addDays, isBefore, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -346,6 +351,41 @@ export default function BookingFlow() {
             </p>
           </div>
           
+          {professional.social_links && Object.values(professional.social_links).some(v => v) && (
+            <div className="flex items-center justify-center gap-4 mt-1">
+              {professional.social_links.instagram && (
+                <a href={`https://instagram.com/${professional.social_links.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
+                  <Instagram className="h-[18px] w-[18px]" />
+                </a>
+              )}
+              {professional.social_links.whatsapp && (
+                <a href={`https://wa.me/${professional.social_links.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
+                  <MessageCircle className="h-[18px] w-[18px]" />
+                </a>
+              )}
+              {professional.social_links.facebook && (
+                <a href={`https://facebook.com/${professional.social_links.facebook}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
+                  <Facebook className="h-[18px] w-[18px]" />
+                </a>
+              )}
+              {professional.social_links.tiktok && (
+                <a href={`https://tiktok.com/@${professional.social_links.tiktok.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
+                  <Video className="h-[18px] w-[18px]" />
+                </a>
+              )}
+              {professional.social_links.youtube && (
+                <a href={`https://youtube.com/${professional.social_links.youtube}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
+                  <Youtube className="h-[18px] w-[18px]" />
+                </a>
+              )}
+              {professional.social_links.website && (
+                <a href={professional.social_links.website.startsWith('http') ? professional.social_links.website : `https://${professional.social_links.website}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
+                  <Globe className="h-[18px] w-[18px]" />
+                </a>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col items-center gap-4">
             {professional.bio && professional.bio.length > 5 && (
               <p className="text-xs sm:text-sm text-muted-foreground max-w-sm leading-relaxed">
