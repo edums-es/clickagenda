@@ -7,23 +7,21 @@ import {
   Scissors,
   Settings,
   LogOut,
-  ExternalLink,
-  MessageSquare,
+  Zap,
+  MessageCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const navItems = [
-  { to: "/dashboard", icon: LayoutDashboard, label: "Painel" },
-  { to: "/agenda", icon: CalendarDays, label: "Agenda" },
-  { to: "/clientes", icon: Users, label: "Clientes" },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/agenda", icon: CalendarDays, label: "Agendamentos" },
   { to: "/servicos", icon: Scissors, label: "Servicos" },
-  { to: "/configuracoes", icon: Settings, label: "Configuracoes" },
+  { to: "/clientes", icon: Users, label: "Clientes" },
+  { to: "/whatsapp", icon: MessageCircle, label: "WhatsApp IA" },
 ];
 
 export default function Sidebar({ onClose }) {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -31,22 +29,21 @@ export default function Sidebar({ onClose }) {
     navigate("/login");
   };
 
-  const initials = user?.name
-    ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-    : "?";
-
   return (
-    <aside className="flex flex-col h-full w-64 bg-card border-r border-border" data-testid="sidebar">
-      <div className="p-6">
-        <h1 className="font-heading text-xl font-bold tracking-tight text-primary">
-          Click Agenda
-        </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">Clicou, agendou.</p>
+    <aside className="flex flex-col h-full w-64 bg-[#F8F9FA] border-r border-border/50 font-sans" data-testid="sidebar">
+      <div className="p-6 flex items-center gap-3">
+        <div className="h-8 w-8 rounded-full bg-[#00D49D] flex items-center justify-center shrink-0">
+          <Zap className="h-4 w-4 text-white fill-white" />
+        </div>
+        <div>
+          <h1 className="font-heading text-[17px] font-bold text-foreground leading-tight">
+            Slotu
+          </h1>
+          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Painel do Profissional</p>
+        </div>
       </div>
 
-      <Separator />
-
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 px-4 py-2 space-y-1">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -54,56 +51,49 @@ export default function Sidebar({ onClose }) {
             onClick={onClose}
             data-testid={`nav-${item.to.slice(1)}`}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 ${
+              `flex items-center gap-3 px-4 py-3 rounded-xl text-[14px] transition-all duration-200 ${
                 isActive
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  ? "bg-[#00D49D]/15 text-[#00D49D] font-bold"
+                  : "text-[#64748B] font-semibold hover:bg-neutral-100/50 hover:text-foreground"
               }`
             }
           >
-            <item.icon className="h-4 w-4" />
+            <item.icon className="h-5 w-5" />
             {item.label}
           </NavLink>
         ))}
       </nav>
 
-      <div className="p-3">
-        {user?.slug && (
-          <a
-            href={`/p/${user.slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="public-page-link"
-            className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-primary transition-colors rounded-lg hover:bg-accent"
+      <div className="px-4 pb-6 space-y-4">
+        <div className="space-y-1">
+          <NavLink
+            to="/configuracoes"
+            onClick={onClose}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-4 py-3 rounded-xl text-[14px] transition-all duration-200 ${
+                isActive
+                  ? "bg-[#00D49D]/15 text-[#00D49D] font-bold"
+                  : "text-[#64748B] font-semibold hover:bg-neutral-100/50 hover:text-foreground"
+              }`
+            }
           >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Minha pagina publica
-          </a>
-        )}
-      </div>
-
-      <Separator />
-
-      <div className="p-4">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-9 w-9">
-            <AvatarImage src={user?.picture} alt={user?.name} />
-            <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
+            <Settings className="h-5 w-5" />
+            Configuracoes
+          </NavLink>
+          <button
             onClick={handleLogout}
-            data-testid="logout-button"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[14px] text-[#64748B] font-semibold hover:bg-red-50 hover:text-red-500 transition-all duration-200"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-5 w-5" />
+            Sair da conta
+          </button>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-border/50 shadow-sm">
+          <p className="text-[10px] text-muted-foreground font-bold tracking-widest uppercase mb-1">Seu Plano</p>
+          <p className="font-bold text-sm text-foreground mb-3">Slotu Pro</p>
+          <Button variant="outline" className="w-full h-9 text-xs font-bold text-[#00D49D] bg-[#00D49D]/10 border-transparent hover:bg-[#00D49D]/20">
+            Ver Detalhes
           </Button>
         </div>
       </div>

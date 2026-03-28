@@ -5,15 +5,22 @@ from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Literal, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
 import bcrypt
 import secrets
 import httpx
 import re
+import boto3
+from botocore.config import Config as BotocoreConfig
+import resend
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -25,6 +32,10 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get('JWT_SECRET', secrets.token_hex(32))
 
 app = FastAPI()
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 api_router = APIRouter(prefix="/api")
 
 UPLOAD_DIR = ROOT_DIR / "uploads"
@@ -33,6 +44,35 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# ==================== EMAIL (RESEND) ====================
+resend.api_key = os.environ.get("RESEND_API_KEY", "")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "noreply@clickagenda.com.br")
+EMAIL_ENABLED = bool(os.environ.get("RESEND_API_KEY", ""))
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+# ==================== CLOUDFLARE R2 ====================
+R2_ENABLED = all([
+    os.environ.get("R2_ACCOUNT_ID"),
+    os.environ.get("R2_ACCESS_KEY_ID"),
+    os.environ.get("R2_SECRET_ACCESS_KEY"),
+])
+
+if R2_ENABLED:
+    r2_client = boto3.client(
+        "s3",
+        endpoint_url=f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com",
+        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
+        config=BotocoreConfig(signature_version="s3v4"),
+        region_name="auto",
+    )
+    R2_BUCKET = os.environ.get("R2_BUCKET_NAME", "clickagenda-uploads")
+    R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
+else:
+    r2_client = None
+    R2_BUCKET = ""
+    R2_PUBLIC_URL = ""
 
 
 # ==================== MODELS ====================
@@ -90,6 +130,8 @@ class ProfileUpdate(BaseModel):
     cancellation_policy_hours: Optional[int] = None
     city: Optional[str] = None
     state: Optional[str] = None
+    plan: Optional[str] = None
+    onboarding_completed: Optional[bool] = None
 
 class QuickLinkCreate(BaseModel):
     service_id: str
@@ -103,6 +145,39 @@ class TurboOfferCreate(BaseModel):
     start_time: str
     discount_percent: int = 20
     expires_hours: int = 24
+
+class ReviewCreate(BaseModel):
+    appointment_id: str
+    rating: int  # 1 a 5
+    comment: Optional[str] = ""
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+
+# ==================== PLAN LIMITS ====================
+
+PLAN_LIMITS = {
+    "free":   {"services": 3,  "quick_links": 2, "turbo_offers": 1},
+    "pro":    {"services": 50, "quick_links": 20, "turbo_offers": 10},
+    "studio": {"services": -1, "quick_links": -1, "turbo_offers": -1},  # -1 = ilimitado
+}
+
+async def check_plan_limit(user: dict, resource: str, collection_name: str) -> None:
+    """Lança HTTPException 403 se o usuário atingiu o limite do plano."""
+    plan = user.get("plan", "free")
+    limit = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"]).get(resource, 0)
+    if limit == -1:
+        return  # Ilimitado
+    count = await db[collection_name].count_documents({"user_id": user["user_id"]})
+    if count >= limit:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Limite do plano {plan.upper()} atingido para {resource}. Faça upgrade para continuar."
+        )
 
 
 # ==================== AUTH HELPERS ====================
@@ -124,6 +199,46 @@ def build_phone_regex(digits: str) -> str:
         return ""
     pattern = r"\D*".join([re.escape(ch) for ch in digits])
     return pattern
+
+import urllib.parse
+
+def build_whatsapp_link(phone: str, message: str) -> Optional[str]:
+    """Gera link wa.me com mensagem formatada"""
+    phone_clean = re.sub(r'\D', '', phone or '')
+    if not phone_clean:
+        return None
+    if not phone_clean.startswith('55'):
+        phone_clean = f"55{phone_clean}"
+    encoded = urllib.parse.quote(message)
+    return f"https://wa.me/{phone_clean}?text={encoded}"
+def build_client_to_professional_message(appointment: dict, professional_name: str) -> str:
+    """Mensagem do CLIENTE para o PROFISSIONAL apos agendar"""
+    notes_str = f"📝 *Observações:* {appointment['notes']}\n" if appointment.get('notes') else ""
+    return (
+        f"Olá, {professional_name}!\n\n"
+        f"Gostaria de confirmar meu agendamento realizado via SalãoZap.\n\n"
+        f"📌 *Detalhes do Agendamento:*\n"
+        f"▪️ *Serviço:* {appointment['service_name']}\n"
+        f"▪️ *Data:* {appointment['date']}\n"
+        f"▪️ *Horário:* {appointment['start_time']} às {appointment['end_time']}\n\n"
+        f"👤 *Meus Dados:*\n"
+        f"▪️ *Nome:* {appointment['client_name']}\n"
+        f"▪️ *Contato:* {appointment['client_phone']}\n"
+        f"{notes_str}\n"
+        f"Agradeço desde já! ✅"
+    )
+
+def build_professional_to_client_message(appointment: dict, professional_name: str) -> str:
+    """Mensagem do PROFISSIONAL para o CLIENTE apos agendar manualmente"""
+    return (
+        f"Olá, {appointment['client_name']}!\n\n"
+        f"Seu agendamento foi confirmado com sucesso. ✅\n\n"
+        f"📌 *Detalhes da Reserva:*\n"
+        f"▪️ *Serviço:* {appointment['service_name']}\n"
+        f"▪️ *Data:* {appointment['date']}\n"
+        f"▪️ *Horário:* {appointment['start_time']} às {appointment['end_time']}\n\n"
+        f"Te aguardamos!"
+    )
 
 async def log_auth_event(request: Request, user_id: str, action: str, provider: str, email: str = ""):
     forwarded_for = request.headers.get("x-forwarded-for", "")
@@ -202,8 +317,8 @@ async def create_session(user_id: str, request: Request, response: Response) -> 
         "session_id": f"sess_{uuid.uuid4().hex[:12]}",
         "user_id": user_id,
         "session_token": session_token,
-        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=7),
+        "created_at": datetime.now(timezone.utc)
     })
     is_secure = is_https_request(request)
     response.set_cookie(
@@ -311,7 +426,8 @@ async def calculate_slots(user_id: str, date_str: str, service_id: str):
 # ==================== AUTH ROUTES ====================
 
 @api_router.post("/auth/register")
-async def register(data: UserRegister, request: Request, response: Response):
+@limiter.limit("5/minute")
+async def register(request: Request, data: UserRegister, response: Response):
     existing = await db.users.find_one({"email": data.email}, {"_id": 0})
     if existing:
         raise HTTPException(400, "Email ja cadastrado")
@@ -344,6 +460,7 @@ async def register(data: UserRegister, request: Request, response: Response):
         "min_advance_hours": 2,
         "cancellation_policy_hours": 6,
         "onboarding_completed": False,
+        "plan": "free",
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.users.insert_one(user)
@@ -384,7 +501,8 @@ async def register(data: UserRegister, request: Request, response: Response):
 
 
 @api_router.post("/auth/login")
-async def login(data: UserLogin, request: Request, response: Response):
+@limiter.limit("10/minute")
+async def login(request: Request, data: UserLogin, response: Response):
     user = await db.users.find_one({"email": data.email}, {"_id": 0})
     if not user or not user.get("password_hash"):
         raise HTTPException(401, "Email ou senha incorretos")
@@ -444,6 +562,7 @@ async def google_session(request: Request, response: Response):
             "min_advance_hours": 2,
             "cancellation_policy_hours": 6,
             "onboarding_completed": False,
+            "plan": "free",
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(user)
@@ -503,6 +622,72 @@ async def logout(request: Request, response: Response):
         secure=is_secure
     )
     return {"message": "Logout realizado"}
+
+
+@api_router.post("/auth/forgot-password")
+@limiter.limit("3/minute")
+async def forgot_password(request: Request, data: PasswordResetRequest):
+    neutral = {"message": "Se o e-mail estiver cadastrado, você receberá um link em breve."}
+    user = await db.users.find_one({"email": data.email}, {"_id": 0})
+    if not user:
+        return neutral
+
+    token = secrets.token_urlsafe(48)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    await db.password_reset_tokens.insert_one({
+        "token": token,
+        "user_id": user["user_id"],
+        "email": data.email,
+        "expires_at": expires_at,
+        "used": False
+    })
+
+    reset_link = f"{FRONTEND_URL}/redefinir-senha?token={token}"
+    if EMAIL_ENABLED:
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+          <h2 style="color:#6366f1;">Redefinição de senha — Slotu</h2>
+          <p>Você solicitou a redefinição da sua senha. Clique no botão abaixo para criar uma nova senha:</p>
+          <p><a href="{reset_link}" style="background:#6366f1;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">Redefinir minha senha</a></p>
+          <p style="color:#888;font-size:12px;">Este link expira em 1 hora. Se você não solicitou, ignore este e-mail.</p>
+        </div>
+        """
+        try:
+            resend.Emails.send({
+                "from": EMAIL_FROM,
+                "to": [data.email],
+                "subject": "Redefinição de senha — Slotu",
+                "html": html,
+            })
+        except Exception as exc:
+            logger.warning(f"[EMAIL] Falha ao enviar reset de senha: {exc}")
+    else:
+        logger.info(f"[EMAIL DISABLED] Reset link (dev): {reset_link}")
+
+    return neutral
+
+
+@api_router.post("/auth/reset-password")
+@limiter.limit("5/minute")
+async def reset_password(request: Request, data: PasswordResetConfirm):
+    now = datetime.now(timezone.utc)
+    reset_doc = await db.password_reset_tokens.find_one(
+        {"token": data.token, "used": False, "expires_at": {"$gt": now}},
+        {"_id": 0}
+    )
+    if not reset_doc:
+        raise HTTPException(400, "Token inválido ou expirado")
+
+    new_hash = hash_password(data.new_password)
+    await db.users.update_one(
+        {"user_id": reset_doc["user_id"]},
+        {"$set": {"password_hash": new_hash}}
+    )
+    await db.password_reset_tokens.update_one(
+        {"token": data.token},
+        {"$set": {"used": True}}
+    )
+    return {"message": "Senha redefinida com sucesso"}
 
 
 # ==================== PROFILE ROUTES ====================
@@ -566,12 +751,31 @@ async def upload_profile_image(
         ext = f".{content_ext}" if content_ext else ".png"
 
     saved_name = f"{user['user_id']}_{image_type}_{uuid.uuid4().hex[:10]}{ext}"
-    saved_path = UPLOAD_DIR / saved_name
-    content = await file.read()
-    saved_path.write_bytes(content)
 
-    public_url = f"{request.base_url}uploads/{saved_name}"
-    return {"url": public_url}
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="Arquivo muito grande. Limite: 5MB")
+
+    if R2_ENABLED:
+        try:
+            r2_client.put_object(
+                Bucket=R2_BUCKET,
+                Key=saved_name,
+                Body=content,
+                ContentType=file.content_type
+            )
+            public_url = f"{R2_PUBLIC_URL}/{saved_name}"
+            return {"url": public_url}
+        except Exception as exc:
+            logger.error(f"[R2] Falha ao fazer upload: {exc}")
+            raise HTTPException(500, "Erro ao fazer upload da imagem")
+    else:
+        # Fallback: salvar em disco local (apenas desenvolvimento)
+        saved_path = UPLOAD_DIR / saved_name
+        saved_path.write_bytes(content)
+        public_url = f"{request.base_url}uploads/{saved_name}"
+        return {"url": public_url}
 
 
 # ==================== SERVICES ROUTES ====================
@@ -583,6 +787,7 @@ async def list_services(user=Depends(get_current_user)):
 
 @api_router.post("/services")
 async def create_service(data: ServiceCreate, user=Depends(get_current_user)):
+    await check_plan_limit(user, "services", "services")
     service = {
         "service_id": f"svc_{uuid.uuid4().hex[:8]}",
         "user_id": user["user_id"],
@@ -746,7 +951,19 @@ async def create_appointment(data: AppointmentCreate, user=Depends(get_current_u
         })
 
     await mock_send_whatsapp(user["user_id"], appointment)
+    await asyncio.gather(
+        send_confirmation_email(appointment, user, "client"),
+        send_confirmation_email(appointment, user, "professional"),
+        return_exceptions=True
+    )
+    
+    professional_name = user.get('business_name') or user.get('name', '')
+    msg = build_professional_to_client_message(appointment, professional_name)
+    whatsapp_link = build_whatsapp_link(data.client_phone, msg)
+    
     result = await db.appointments.find_one({"appointment_id": appointment["appointment_id"]}, {"_id": 0})
+    result['whatsapp_link'] = whatsapp_link
+    result['whatsapp_target'] = 'client'
     return result
 
 @api_router.put("/appointments/{appointment_id}/status")
@@ -870,7 +1087,8 @@ async def get_public_slots(slug: str, date: str, service_id: str):
     return {"slots": slots, "date": date}
 
 @api_router.post("/public/{slug}/book")
-async def public_book(slug: str, data: AppointmentCreate, request: Request):
+@limiter.limit("10/minute")
+async def public_book(slug: str, request: Request, data: AppointmentCreate):
     user = await db.users.find_one({"slug": slug}, {"_id": 0})
     if not user:
         raise HTTPException(404, "Profissional nao encontrado")
@@ -942,7 +1160,20 @@ async def public_book(slug: str, data: AppointmentCreate, request: Request):
         })
 
     await mock_send_whatsapp(user["user_id"], appointment)
+    await asyncio.gather(
+        send_confirmation_email(appointment, user, "client"),
+        send_confirmation_email(appointment, user, "professional"),
+        return_exceptions=True
+    )
+    
+    professional_phone = user.get('phone', '')
+    professional_name = user.get('business_name') or user.get('name', '')
+    msg = build_client_to_professional_message(appointment, professional_name)
+    whatsapp_link = build_whatsapp_link(professional_phone, msg)
+    
     result = await db.appointments.find_one({"appointment_id": appointment["appointment_id"]}, {"_id": 0})
+    result['whatsapp_link'] = whatsapp_link
+    result['whatsapp_target'] = 'professional'
     return result
 
 
@@ -1099,6 +1330,69 @@ async def mock_send_whatsapp(user_id: str, appointment: dict):
     }
     await db.whatsapp_messages.insert_one(msg_doc)
     logger.info(f"[MOCK WhatsApp] Message sent to {appointment['client_phone']}")
+
+
+async def send_confirmation_email(
+    appointment: dict,
+    professional: dict,
+    recipient: Literal["client", "professional"]
+) -> None:
+    """Envia e-mail de confirmação de agendamento via Resend."""
+    if not EMAIL_ENABLED:
+        logger.warning("[EMAIL DISABLED] RESEND_API_KEY não configurado. E-mail não enviado.")
+        return
+
+    if recipient == "client":
+        to_email = appointment.get("client_email", "")
+        if not to_email:
+            logger.warning("[EMAIL] client_email vazio — e-mail ao cliente não enviado.")
+            return
+        subject = f"Confirmação de agendamento — {appointment.get('service_name', '')}"
+        recipient_name = appointment.get("client_name", "Cliente")
+    else:
+        to_email = professional.get("email", "")
+        if not to_email:
+            logger.warning("[EMAIL] E-mail do profissional vazio — e-mail ao profissional não enviado.")
+            return
+        subject = f"Novo agendamento recebido — {appointment.get('service_name', '')}"
+        recipient_name = professional.get("business_name") or professional.get("name", "Profissional")
+
+    token = appointment.get("token", "")
+    manage_link = f"{FRONTEND_URL}/agendamento/{token}" if token else ""
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #6366f1;">Slotu — Agendamento Confirmado ✅</h2>
+      <p>Olá, <strong>{recipient_name}</strong>!</p>
+      <p>Seu agendamento foi {'confirmado' if recipient == 'client' else 'recebido'} com sucesso.</p>
+      <table style="width:100%; border-collapse:collapse; margin: 16px 0;">
+        <tr><td style="padding:8px; background:#f4f4f4; font-weight:bold;">Serviço</td>
+            <td style="padding:8px;">{appointment.get('service_name', '')}</td></tr>
+        <tr><td style="padding:8px; background:#f4f4f4; font-weight:bold;">Data</td>
+            <td style="padding:8px;">{appointment.get('date', '')}</td></tr>
+        <tr><td style="padding:8px; background:#f4f4f4; font-weight:bold;">Horário</td>
+            <td style="padding:8px;">{appointment.get('start_time', '')} – {appointment.get('end_time', '')}</td></tr>
+        <tr><td style="padding:8px; background:#f4f4f4; font-weight:bold;">Cliente</td>
+            <td style="padding:8px;">{appointment.get('client_name', '')}</td></tr>
+        <tr><td style="padding:8px; background:#f4f4f4; font-weight:bold;">Telefone</td>
+            <td style="padding:8px;">{appointment.get('client_phone', '')}</td></tr>
+      </table>
+      {'<p><a href="' + manage_link + '" style="background:#6366f1;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;">Gerenciar Agendamento</a></p>' if manage_link else ''}
+      <p style="color:#888; font-size:12px;">Agendado via Slotu</p>
+    </div>
+    """
+
+    try:
+        resend.Emails.send({
+            "from": EMAIL_FROM,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_body,
+        })
+        logger.info(f"[EMAIL] Confirmação enviada para {to_email} ({recipient})")
+    except Exception as exc:
+        logger.warning(f"[EMAIL] Falha ao enviar e-mail para {to_email}: {exc}")
+
 
 @api_router.get("/whatsapp/log")
 async def get_whatsapp_log(user=Depends(get_current_user)):
@@ -1304,6 +1598,63 @@ async def remove_favorite(professional_id: str, user=Depends(get_current_user)):
     return {"message": "Removido dos favoritos"}
 
 
+# ==================== REVIEWS ROUTES ====================
+
+@api_router.post("/reviews/{token}")
+async def create_review(token: str, data: ReviewCreate):
+    apt = await db.appointments.find_one({"token": token}, {"_id": 0})
+    if not apt:
+        raise HTTPException(404, "Agendamento nao encontrado")
+    if apt["status"] != "completed":
+        raise HTTPException(400, "Agendamento ainda nao concluido")
+    if apt["appointment_id"] != data.appointment_id:
+        raise HTTPException(400, "Token invalido para este agendamento")
+
+    existing = await db.reviews.find_one({"appointment_id": data.appointment_id}, {"_id": 0})
+    if existing:
+        raise HTTPException(400, "Avaliacao ja enviada para este agendamento")
+
+    review = {
+        "review_id": f"rev_{uuid.uuid4().hex[:8]}",
+        "appointment_id": data.appointment_id,
+        "user_id": apt["user_id"],
+        "client_name": apt["client_name"],
+        "service_name": apt["service_name"],
+        "rating": max(1, min(5, data.rating)),
+        "comment": data.comment[:300] if data.comment else "",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.reviews.insert_one(review)
+    return {"message": "Avaliacao enviada com sucesso"}
+
+@api_router.get("/reviews")
+async def list_reviews(user=Depends(get_current_user)):
+    reviews = await db.reviews.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    total = len(reviews)
+    avg = sum(r["rating"] for r in reviews) / total if total > 0 else 0
+    return {"reviews": reviews, "average": round(avg, 1), "total": total}
+
+@api_router.get("/public/{slug}/reviews")
+async def get_public_reviews(slug: str):
+    user = await db.users.find_one({"slug": slug}, {"_id": 0})
+    if not user:
+        raise HTTPException(404, "Profissional nao encontrado")
+    
+    reviews = await db.reviews.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).limit(10).to_list(10)
+    
+    pipeline = [
+        {"$match": {"user_id": user["user_id"]}},
+        {"$group": {"_id": None, "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}}
+    ]
+    stats = await db.reviews.aggregate(pipeline).to_list(1)
+    
+    avg = stats[0]["avg"] if stats else 0
+    total = stats[0]["count"] if stats else 0
+    
+    return {"reviews": reviews, "average": round(avg, 1), "total": total}
+
+
+
 # ==================== QUICK LINKS ROUTES ====================
 
 @api_router.get("/quick-links")
@@ -1317,6 +1668,7 @@ async def list_quick_links(user=Depends(get_current_user)):
 
 @api_router.post("/quick-links")
 async def create_quick_link(data: QuickLinkCreate, user=Depends(get_current_user)):
+    await check_plan_limit(user, "quick_links", "quick_links")
     svc = await db.services.find_one({"service_id": data.service_id, "user_id": user["user_id"]}, {"_id": 0})
     if not svc:
         raise HTTPException(404, "Servico nao encontrado")
@@ -1376,7 +1728,8 @@ async def get_quick_link_public(code: str):
     }
 
 @api_router.post("/ql/{code}/book")
-async def book_via_quick_link(code: str, data: AppointmentCreate):
+@limiter.limit("10/minute")
+async def book_via_quick_link(code: str, request: Request, data: AppointmentCreate):
     link = await db.quick_links.find_one({"code": code, "active": True}, {"_id": 0})
     if not link:
         raise HTTPException(404, "Link nao encontrado")
@@ -1432,6 +1785,11 @@ async def book_via_quick_link(code: str, data: AppointmentCreate):
     await db.appointments.insert_one(apt_doc)
     await db.quick_links.update_one({"code": code}, {"$inc": {"current_uses": 1}})
     await mock_send_whatsapp(user["user_id"], apt_doc)
+    await asyncio.gather(
+        send_confirmation_email(apt_doc, user, "client"),
+        send_confirmation_email(apt_doc, user, "professional"),
+        return_exceptions=True
+    )
 
     result = await db.appointments.find_one({"appointment_id": apt_doc["appointment_id"]}, {"_id": 0})
     return result
@@ -1446,6 +1804,7 @@ async def list_turbo_offers(user=Depends(get_current_user)):
 
 @api_router.post("/turbo-offers")
 async def create_turbo_offer(data: TurboOfferCreate, user=Depends(get_current_user)):
+    await check_plan_limit(user, "turbo_offers", "turbo_offers")
     svc = await db.services.find_one({"service_id": data.service_id, "user_id": user["user_id"]}, {"_id": 0})
     if not svc:
         raise HTTPException(404, "Servico nao encontrado")
@@ -1499,6 +1858,7 @@ async def get_public_turbo_offers(slug: str):
     }
 
 @api_router.post("/turbo-offers/{offer_id}/book")
+@limiter.limit("10/minute")
 async def book_turbo_offer(offer_id: str, request: Request):
     body = await request.json()
     offer = await db.turbo_offers.find_one({"offer_id": offer_id, "status": "active"}, {"_id": 0})
@@ -1546,9 +1906,307 @@ async def book_turbo_offer(offer_id: str, request: Request):
     await db.appointments.insert_one(apt_doc)
     await db.turbo_offers.update_one({"offer_id": offer_id}, {"$set": {"status": "booked"}})
     await mock_send_whatsapp(offer["user_id"], apt_doc)
+    await asyncio.gather(
+        send_confirmation_email(apt_doc, user, "client"),
+        send_confirmation_email(apt_doc, user, "professional"),
+        return_exceptions=True
+    )
 
     result = await db.appointments.find_one({"appointment_id": apt_doc["appointment_id"]}, {"_id": 0})
     return result
+
+
+# ==================== WHATSAPP & IA ====================
+
+from openai import AsyncOpenAI
+
+EVOLUTION_API_URL = os.environ.get("EVOLUTION_API_URL", "http://localhost:8080")
+EVOLUTION_GLOBAL_API_KEY = os.environ.get("EVOLUTION_GLOBAL_API_KEY", "")
+
+class WhatsappConfigUpdate(BaseModel):
+    is_active: bool
+    ai_prompt: str
+
+@api_router.get("/whatsapp/config")
+async def get_whatsapp_config(user=Depends(get_current_user)):
+    user_id = user["user_id"]
+    config = await db.whatsapp_config.find_one({"user_id": user_id}, {"_id": 0})
+    if not config:
+        config = {
+            "user_id": user_id,
+            "instance_name": f"clickagenda_{user_id.replace('-', '')}",
+            "is_active": False,
+            "ai_prompt": "Você é um assistente virtual de agendamento amigável e direto. Ajude o cliente a decidir o serviço e mostre horários. Sempre confirme data e hora.",
+            "status": "DISCONNECTED"
+        }
+        await db.whatsapp_config.insert_one(config)
+    return config
+
+@api_router.put("/whatsapp/config")
+async def update_whatsapp_config(data: WhatsappConfigUpdate, user=Depends(get_current_user)):
+    await db.whatsapp_config.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"is_active": data.is_active, "ai_prompt": data.ai_prompt}}
+    )
+    return await get_whatsapp_config(user)
+
+@api_router.post("/whatsapp/connect")
+async def connect_whatsapp(user=Depends(get_current_user)):
+    config = await get_whatsapp_config(user)
+    instance_name = config["instance_name"]
+    
+    headers = {"apikey": EVOLUTION_GLOBAL_API_KEY, "Content-Type": "application/json"}
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Verifica se instancia ja existe
+        try:
+            res_state = await client.get(f"{EVOLUTION_API_URL}/instance/connectionState/{instance_name}", headers=headers)
+            exists = res_state.status_code == 200
+        except Exception:
+            exists = False
+
+        if not exists:
+            create_payload = {
+                "instanceName": instance_name,
+                "token": secrets.token_hex(16),
+                "qrcode": True,
+                "integration": "WHATSAPP-BAILEYS"
+            }
+            try:
+                res_create = await client.post(f"{EVOLUTION_API_URL}/instance/create", json=create_payload, headers=headers)
+                if res_create.status_code in [401, 403]:
+                    logger.error("API Key recusada pela Evolution.")
+                    raise HTTPException(500, "Evolution API recusou a chave. Verifique o EVOLUTION_GLOBAL_API_KEY.")
+            except Exception as e:
+                logger.error(f"Erro ao criar instancia Evolution: {e}")
+                # Pode ter criado com sucesso no timeout, entao nao vamos crashar e seguimos.
+                
+        # Configurar Webhook sempre para forcar update
+        try:
+            backend_url = os.environ.get("BACKEND_PUBLIC_URL", FRONTEND_URL.replace(":3000", ":8000"))
+            webhook_payload = {
+                "webhook": {
+                    "enabled": True,
+                    "url": f"{backend_url}/api/whatsapp/webhook/{user['user_id']}",
+                    "byEvents": False,
+                    "base64": False,
+                    "events": ["MESSAGES_UPSERT"],
+                    "headers": {
+                        "Bypass-Tunnel-Reminder": "true"
+                    }
+                }
+            }
+            await client.post(f"{EVOLUTION_API_URL}/webhook/set/{instance_name}", json=webhook_payload, headers=headers)
+        except Exception as e:
+            logger.error(f"Erro ao configurar webhook: {e}")
+
+        # Buscar QR Code
+        try:
+            res_connect = await client.get(f"{EVOLUTION_API_URL}/instance/connect/{instance_name}", headers=headers)
+            if res_connect.status_code == 200:
+                data = res_connect.json()
+                if "base64" in data:
+                    return {"status": "AWAITING_QR", "qr_code": data.get("base64")}
+                else:
+                    return {"status": "AWAITING_QR", "qr_code": ""}
+            else:
+                raise Exception("Erro HTTP ao buscar base64")
+        except Exception as e:
+            logger.error(f"Erro ao obter QR da Evolution: {e}")
+            raise HTTPException(500, "A Evolution API nao devolveu o QR Code a tempo. Tente gerar novamente em 5 segundos.")
+
+@api_router.get("/whatsapp/instance-status")
+async def get_whatsapp_instance_status(user=Depends(get_current_user)):
+    config = await get_whatsapp_config(user)
+    instance_name = config["instance_name"]
+    
+    headers = {"apikey": EVOLUTION_GLOBAL_API_KEY}
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.get(f"{EVOLUTION_API_URL}/instance/connectionState/{instance_name}", headers=headers)
+            if res.status_code == 200:
+                state = res.json().get("instance", {}).get("state", "DISCONNECTED")
+                return {"status": state}
+            return {"status": "DISCONNECTED"}
+        except:
+            return {"status": "DISCONNECTED"}
+
+@api_router.delete("/whatsapp/disconnect")
+async def disconnect_whatsapp(user=Depends(get_current_user)):
+    config = await get_whatsapp_config(user)
+    instance_name = config["instance_name"]
+    headers = {"apikey": EVOLUTION_GLOBAL_API_KEY}
+    async with httpx.AsyncClient() as client:
+        await client.delete(f"{EVOLUTION_API_URL}/instance/logout/{instance_name}", headers=headers)
+    return {"message": "Desconectado com sucesso"}
+
+
+async def send_whatsapp_message(instance_name: str, phone: str, text: str):
+    headers = {"apikey": EVOLUTION_GLOBAL_API_KEY, "Content-Type": "application/json"}
+    payload = {
+        "number": phone,
+        "options": {"delay": 1200, "presence": "composing"},
+        "textMessage": {"text": text}
+    }
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(f"{EVOLUTION_API_URL}/message/sendText/{instance_name}", json=payload, headers=headers)
+        except Exception as e:
+            logger.error(f"Erro ao enviar msg via Evolution: {e}")
+
+async def handle_ai_message(user_id: str, phone: str, message: str, config: dict):
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if not openai_key:
+        logger.error("OPENAI_API_KEY não configurada")
+        return
+        
+    ai_client = AsyncOpenAI(api_key=openai_key)
+    
+    convo = await db.whatsapp_conversations.find_one({"user_id": user_id, "phone": phone})
+    if not convo:
+        convo = {"user_id": user_id, "phone": phone, "history": []}
+        
+    history = convo["history"]
+    history.append({"role": "user", "content": message})
+    
+    if len(history) > 10:
+        history = history[-10:]
+        
+    services = await db.services.find({"user_id": user_id, "active": True}, {"_id": 0}).to_list(100)
+    services_text = "\n".join([f"- ID: {s['service_id']}, Nome: {s['name']}, Duração: {s['duration_minutes']} min, Preço: R${s['price']}" for s in services])
+    
+    system_prompt = f"""{config['ai_prompt']}
+    
+    SERVIÇOS DISPONÍVEIS:
+    {services_text}
+    
+    INSTRUÇÕES CRITICAS:
+    Você DEVE consultar horários e DEVE fazer agendamentos enviando comandos exatos, sem adicionar nenhum outro texto na mesma mensagem de comando.
+    Para ver horários de um dia (formato YYYY-MM-DD), responda EXATAMENTE: [TOOL:check_availability:YYYY-MM-DD:SERVICE_ID]
+    Para realizar um agendamento, responda EXATAMENTE: [TOOL:book_appointment:SERVICE_ID:YYYY-MM-DD:HH:MM:NomeDoCliente]
+    Exemplo de agendamento: [TOOL:book_appointment:svc_123:2026-04-10:14:30:Maria Silva]
+
+    Se a resposta não for um comando, fale com o cliente normalmente usando seu tom configurado.
+    Identidade do cliente: o telefone é o identificador único. Peça o nome dele se não souber.
+    """
+    
+    messages = [{"role": "system", "content": system_prompt}] + history
+    
+    response_text = ""
+    for step in range(3):
+        res = await ai_client.chat.completions.create(
+            model='gpt-4o-mini',
+            messages=messages
+        )
+        reply = res.choices[0].message.content
+        
+        if "[TOOL:check_availability:" in reply:
+            try:
+                parts = reply.split("[TOOL:check_availability:")[1].split("]")[0].split(":")
+                date_str = parts[0]
+                service_id = parts[1]
+                slots = await calculate_slots(user_id, date_str, service_id)
+                slots_txt = ", ".join([s["start_time"] for s in slots]) if slots else "Nenhum horário livre."
+                history.append({"role": "assistant", "content": reply})
+                history.append({"role": "user", "content": f"SISTEMA: Retorno de check_availability ({date_str}): {slots_txt}. Agora formate essa resposta amigavelmente para o cliente e devolva."})
+                messages = [{"role": "system", "content": system_prompt}] + history
+                continue
+            except Exception as e:
+                history.append({"role": "assistant", "content": reply})
+                history.append({"role": "user", "content": f"SISTEMA: Erro na chamada da ferramenta: {e}"})
+                messages = [{"role": "system", "content": system_prompt}] + history
+                continue
+            
+        if "[TOOL:book_appointment:" in reply:
+            try:
+                parts = reply.split("[TOOL:book_appointment:")[1].split("]")[0].split(":")
+                service_id = parts[0]
+                date_str = parts[1]
+                time_str = f"{parts[2]}:{parts[3]}"
+                client_name = parts[4]
+                
+                # Encontrar o serviço
+                service = await db.services.find_one({"service_id": service_id, "user_id": user_id})
+                if not service:
+                    raise Exception("Servico invalido")
+                    
+                end_minutes = time_to_minutes(time_str) + service["duration_minutes"]
+                
+                # Criar appointment (simples)
+                apt_id = f"apt_{uuid.uuid4().hex[:8]}"
+                token = secrets.token_urlsafe(16)
+                apt = {
+                    "appointment_id": apt_id,
+                    "user_id": user_id,
+                    "service_id": service_id,
+                    "service_name": service["name"],
+                    "client_name": client_name,
+                    "client_phone": phone,
+                    "date": date_str,
+                    "start_time": time_str,
+                    "end_time": minutes_to_time(end_minutes),
+                    "status": "confirmed",
+                    "source": "whatsapp_ai",
+                    "token": token,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                
+                # Gravar cliente se não existir
+                existing_client = await db.clients.find_one({"user_id": user_id, "phone": phone})
+                if not existing_client:
+                    await db.clients.insert_one({
+                        "client_id": f"cli_{uuid.uuid4().hex[:8]}",
+                        "user_id": user_id,
+                        "name": client_name,
+                        "phone": phone,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                await db.appointments.insert_one(apt)
+                history.append({"role": "assistant", "content": reply})
+                history.append({"role": "user", "content": f"SISTEMA: Agendamento CONFIRMADO! ID: {apt_id}. Agradeça e lembre o cliente do horário."})
+                messages = [{"role": "system", "content": system_prompt}] + history
+                continue
+            except Exception as e:
+                history.append({"role": "assistant", "content": reply})
+                history.append({"role": "user", "content": f"SISTEMA: Erro ao agendar: {e}. Diga ao cliente que houve um problema e tente novamente com novos horários."})
+                messages = [{"role": "system", "content": system_prompt}] + history
+                continue
+                
+        # Final response
+        response_text = reply
+        break
+        
+    await db.whatsapp_conversations.update_one(
+        {"user_id": user_id, "phone": phone},
+        {"$set": {"history": history}},
+        upsert=True
+    )
+    
+    if response_text:
+        await send_whatsapp_message(config["instance_name"], phone, response_text)
+
+@app.post("/api/whatsapp/webhook/{user_id}")
+async def whatsapp_webhook(user_id: str, request: Request):
+    payload = await request.json()
+    config = await db.whatsapp_config.find_one({"user_id": user_id})
+    if not config or not config.get("is_active"):
+        return {"status": "ignored"}
+        
+    if payload.get("event") == "messages.upsert":
+        for msg in payload.get("data", {}).get("messages", []):
+            if msg.get("key", {}).get("fromMe"):
+                continue
+            phone = msg.get("key", {}).get("remoteJid", "").split("@")[0]
+            text = ""
+            msg_content = msg.get("message", {})
+            if "conversation" in msg_content:
+                text = msg_content["conversation"]
+            elif "extendedTextMessage" in msg_content:
+                text = msg_content["extendedTextMessage"].get("text", "")
+            if text:
+                asyncio.create_task(handle_ai_message(user_id, phone, text, config))
+    return {"status": "ok"}
 
 
 # ==================== ROOT ====================
@@ -1559,16 +2217,40 @@ async def root():
 
 app.include_router(api_router)
 
+APP_ENV = os.environ.get("APP_ENV", "development")
+cors_origins_raw = os.environ.get("CORS_ORIGINS", "")
+
+if APP_ENV == "production":
+    if not cors_origins_raw:
+        raise RuntimeError(
+            "FATAL: CORS_ORIGINS não definido em produção. "
+            "Configure a variável de ambiente antes de iniciar o servidor."
+        )
+    cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+else:
+    # Desenvolvimento: wildcard permitido com aviso
+    if not cors_origins_raw:
+        logger.warning("CORS_ORIGINS não definido. Usando * — apenas para desenvolvimento.")
+        cors_origins = ["*"]
+    else:
+        cors_origins = [o.strip() for o in cors_origins_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 @app.on_event("startup")
 async def startup():
+    # Validações de segurança em produção
+    if APP_ENV == "production" and not os.environ.get("CORS_ORIGINS"):
+        raise RuntimeError("FATAL: CORS_ORIGINS obrigatório em produção.")
+    if APP_ENV == "production" and os.environ.get("JWT_SECRET") == "troque-por-um-valor-aleatorio-seguro":
+        raise RuntimeError("FATAL: JWT_SECRET não foi alterado. Use um valor seguro em produção.")
+
     await db.users.create_index("user_id", unique=True, background=True)
     await db.users.create_index("email", unique=True, background=True, sparse=True)
     await db.users.create_index("slug", unique=True, background=True, sparse=True)
@@ -1577,7 +2259,13 @@ async def startup():
     await db.services.create_index([("user_id", 1)], background=True)
     await db.clients.create_index([("user_id", 1)], background=True)
     await db.availability_rules.create_index([("user_id", 1)], background=True)
+    # TTL index: remove sessões expiradas automaticamente (Fix 6)
     await db.user_sessions.create_index("session_token", background=True)
+    await db.user_sessions.create_index(
+        "expires_at",
+        expireAfterSeconds=0,
+        background=True
+    )
     await db.quick_links.create_index("code", unique=True, background=True, sparse=True)
     await db.quick_links.create_index([("user_id", 1)], background=True)
     await db.turbo_offers.create_index([("user_id", 1)], background=True)
@@ -1585,6 +2273,11 @@ async def startup():
     await db.favorites.create_index([("client_user_id", 1)], background=True)
     await db.users.create_index([("role", 1), ("city", 1)], background=True)
     await db.auth_events.create_index([("user_id", 1), ("created_at", -1)], background=True)
+    await db.reviews.create_index([("user_id", 1), ("created_at", -1)], background=True)
+    await db.reviews.create_index("appointment_id", unique=True, background=True, sparse=True)
+    # TTL index para tokens de reset de senha (Fix 2)
+    await db.password_reset_tokens.create_index("token", unique=True, background=True)
+    await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0, background=True)
     logger.info("Click Agenda API started successfully")
 
 @app.on_event("shutdown")

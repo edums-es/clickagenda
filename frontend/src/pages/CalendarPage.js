@@ -21,6 +21,7 @@ import {
   UserCheck,
   Play,
   Ban,
+  MessageCircle,
 } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -62,6 +63,7 @@ export default function CalendarPage() {
     notes: "",
   });
   const [creating, setCreating] = useState(false);
+  const [createdApt, setCreatedApt] = useState(null);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
 
@@ -102,8 +104,9 @@ export default function CalendarPage() {
     }
     setCreating(true);
     try {
-      await api.post("/appointments", { ...newApt, date: dateStr });
+      const res = await api.post("/appointments", { ...newApt, date: dateStr });
       toast.success("Agendamento criado!");
+      setCreatedApt(res.data);
       setShowNewDialog(false);
       setNewApt({ service_id: "", client_name: "", client_phone: "", client_email: "", start_time: "", notes: "" });
       loadData();
@@ -272,7 +275,10 @@ export default function CalendarPage() {
           <div className="space-y-4 pt-2">
             <div className="space-y-2">
               <Label>Servico *</Label>
-              <Select value={newApt.service_id} onValueChange={(v) => setNewApt((p) => ({ ...p, service_id: v }))}>
+              <Select
+                value={newApt.service_id}
+                onValueChange={(v) => setNewApt((p) => ({ ...p, service_id: v }))}
+              >
                 <SelectTrigger data-testid="new-apt-service-select">
                   <SelectValue placeholder="Selecione o servico" />
                 </SelectTrigger>
@@ -333,6 +339,68 @@ export default function CalendarPage() {
               {creating ? "Criando..." : "Criar agendamento"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={!!createdApt} onOpenChange={() => setCreatedApt(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto bg-green-100 p-3 rounded-full w-fit mb-2">
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+            </div>
+            <DialogTitle className="text-center text-2xl font-heading text-green-700">
+              Agendamento criado!
+            </DialogTitle>
+          </DialogHeader>
+          {createdApt && (
+            <div className="space-y-6 py-2">
+              <Card className="shadow-soft bg-muted/30">
+                <CardContent className="pt-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Servico:</span>
+                    <span className="font-medium">{createdApt.service_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cliente:</span>
+                    <span className="font-medium">{createdApt.client_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Data:</span>
+                    <span className="font-medium">{createdApt.date}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Horario:</span>
+                    <span className="font-medium">
+                      {createdApt.start_time} - {createdApt.end_time}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <div className="space-y-3">
+                {createdApt.whatsapp_link && (
+                  <a
+                    href={createdApt.whatsapp_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full block"
+                  >
+                    <Button className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold gap-2">
+                      <MessageCircle className="h-5 w-5" />
+                      Enviar confirmacao para o cliente
+                    </Button>
+                  </a>
+                )}
+                <Button variant="outline" className="w-full" onClick={() => setCreatedApt(null)}>
+                  Fechar
+                </Button>
+              </div>
+              <p className="text-xs text-center text-muted-foreground">
+                Toque para enviar o resumo do agendamento para o cliente via WhatsApp.
+              </p>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

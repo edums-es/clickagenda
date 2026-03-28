@@ -294,10 +294,10 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-primary" />
-            <span className="font-heading font-bold">Click Agenda</span>
+            <span className="font-heading font-bold">Slotu</span>
           </div>
           <p className="text-sm text-muted-foreground">
-            Clicou, agendou. Todos os direitos reservados.
+            Seu slot, sua agenda. Todos os direitos reservados.
           </p>
         </div>
       </footer>

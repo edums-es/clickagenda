@@ -59,7 +59,7 @@ export default function ClientDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
           <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight">
-            Ola, {user?.name?.split(" ")[0]}
+            Ola, {(user?.name || "").split(" ")[0]}
           </h1>
           <p className="text-sm text-muted-foreground capitalize mt-1">{today}</p>
         </div>

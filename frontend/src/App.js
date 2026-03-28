@@ -8,6 +8,8 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import Pricing from "@/pages/Pricing";
 import AuthCallback from "@/pages/AuthCallback";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import Dashboard from "@/pages/Dashboard";
 import CalendarPage from "@/pages/CalendarPage";
 import Clients from "@/pages/Clients";
@@ -22,8 +24,10 @@ import ClientAppointments from "@/pages/ClientAppointments";
 import ClientFavorites from "@/pages/ClientFavorites";
 import ClientConfig from "@/pages/ClientConfig";
 import PublicProfile from "@/pages/PublicProfile";
+import WhatsappIA from "@/pages/WhatsappIA";
 import BookingFlow from "@/pages/BookingFlow";
 import AppointmentManage from "@/pages/AppointmentManage";
+import ReviewPage from "@/pages/ReviewPage";
 import DashboardLayout from "@/components/DashboardLayout";
 import ClientLayout from "@/components/ClientLayout";
 
@@ -61,9 +65,12 @@ function AppRouter() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/planos" element={<Pricing />} />
+      <Route path="/esqueci-senha" element={<ForgotPassword />} />
+      <Route path="/redefinir-senha" element={<ResetPassword />} />
       <Route path="/p/:slug" element={<PublicProfile />} />
       <Route path="/p/:slug/agendar" element={<BookingFlow />} />
       <Route path="/agendamento/:token" element={<AppointmentManage />} />
+      <Route path="/avaliar/:token" element={<ReviewPage />} />
       <Route path="/marketplace" element={<Marketplace />} />
       <Route path="/ql/:code" element={<QuickLinkPage />} />
       <Route
@@ -119,6 +126,14 @@ function AppRouter() {
         element={
           <ProtectedRoute roles={["professional"]}>
             <DashboardLayout><Settings /></DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/whatsapp"
+        element={
+          <ProtectedRoute roles={["professional"]}>
+            <DashboardLayout><WhatsappIA /></DashboardLayout>
           </ProtectedRoute>
         }
       />

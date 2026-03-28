@@ -199,7 +199,7 @@ export default function AppointmentManage() {
           <p className="text-xs text-muted-foreground">
             Agendamento por{" "}
             <Link to="/" className="text-primary hover:underline font-medium">
-              Click Agenda
+              Slotu
             </Link>
           </p>
         </footer>

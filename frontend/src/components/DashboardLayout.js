@@ -26,7 +26,7 @@ export default function DashboardLayout({ children }) {
             <Sidebar onClose={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
-        <span className="font-heading font-bold text-primary text-lg">Click Agenda</span>
+        <span className="font-heading font-bold text-primary text-lg">Slotu</span>
       </div>
 
       {/* Main content */}

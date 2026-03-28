@@ -68,3 +68,21 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+## Deploy
+
+Antes de gerar o build de produção, defina a variável de ambiente `REACT_APP_BACKEND_URL` com a URL pública do seu backend:
+
+```bash
+REACT_APP_BACKEND_URL=https://api.clickagenda.com.br npm run build
+```
+
+Ou copie `.env.production.example` para `.env.production` e preencha o valor:
+
+```bash
+cp .env.production.example .env.production
+# edite .env.production e defina REACT_APP_BACKEND_URL
+npm run build
+```
+
+> **Atenção:** sem esta variável definida, o frontend tentará conectar ao backend na porta 8000 do mesmo host — o que não funciona em produção com proxy reverso (nginx, Cloudflare Tunnel, etc).

@@ -46,7 +46,7 @@ export default function Login() {
           </Link>
           <div className="flex items-center gap-2">
             <CalendarDays className="h-8 w-8 text-primary" />
-            <span className="font-heading font-bold text-3xl">Click Agenda</span>
+            <span className="font-heading font-bold text-3xl">Slotu</span>
           </div>
           <div>
             <h1 className="font-heading text-3xl md:text-4xl font-bold tracking-tight">
@@ -132,6 +132,15 @@ export default function Login() {
                       className="pl-10"
                     />
                   </div>
+                </div>
+                <div className="flex justify-end">
+                  <Link
+                    to="/esqueci-senha"
+                    className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                    data-testid="forgot-password-link"
+                  >
+                    Esqueci minha senha
+                  </Link>
                 </div>
                 <Button
                   type="submit"

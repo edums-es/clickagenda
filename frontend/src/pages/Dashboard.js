@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import {
   CalendarDays,
   Users,
@@ -14,14 +13,18 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
-  TrendingUp,
-  ExternalLink,
-  Bell,
+  Search,
+  Share2,
+  Plus,
+  MessageCircle,
+  Link as LinkIcon,
+  Copy
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const statusLabels = {
   scheduled: "Agendado",
@@ -33,14 +36,23 @@ const statusLabels = {
   no_show: "Faltou",
 };
 
+import OnboardingWizard from "@/components/OnboardingWizard";
+
 export default function Dashboard() {
   const { user } = useAuth();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  
+  useEffect(() => {
+    if (user?.onboarding_completed === false) {
+      setShowOnboarding(true);
+    }
+  }, [user]);
+  
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [newAppointments, setNewAppointments] = useState(0);
-  const [lastUpdated, setLastUpdated] = useState(null);
   const todayDate = new Date();
   const monthStartDate = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
   const initialStart = format(monthStartDate, "yyyy-MM-dd");
@@ -48,9 +60,11 @@ export default function Dashboard() {
   const [appliedRange, setAppliedRange] = useState({ start: initialStart, end: initialEnd });
   const [startDate, setStartDate] = useState(initialStart);
   const [endDate, setEndDate] = useState(initialEnd);
-  const lastTotalRef = useRef(null);
+  
+  const lastCountRef = useRef(null);
   const audioContextRef = useRef(null);
-  const soundPromptedRef = useRef(false);
+
+  const initials = user?.name ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() : "?";
 
   const unlockSound = useCallback(async () => {
     try {
@@ -68,19 +82,32 @@ export default function Dashboard() {
   const playNotificationSound = useCallback(() => {
     if (!soundEnabled) return;
     try {
-      const audioContext = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
-      audioContextRef.current = audioContext;
-      if (audioContext.state === "suspended") return;
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.value = 880;
-      gainNode.gain.value = 0.06;
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-      oscillator.start();
-      oscillator.stop(audioContext.currentTime + 0.25);
-    } catch {}
+      const audioCtx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
+      audioContextRef.current = audioCtx;
+      if (audioCtx.state === "suspended") return;
+
+      const osc1 = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      osc1.connect(gain1);
+      gain1.connect(audioCtx.destination);
+      osc1.frequency.value = 520;
+      gain1.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      osc1.start(audioCtx.currentTime);
+      osc1.stop(audioCtx.currentTime + 0.3);
+
+      const osc2 = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(audioCtx.destination);
+      osc2.frequency.value = 780;
+      gain2.gain.setValueAtTime(0.3, audioCtx.currentTime + 0.35);
+      gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.65);
+      osc2.start(audioCtx.currentTime + 0.35);
+      osc2.stop(audioCtx.currentTime + 0.65);
+    } catch (e) {
+      console.log('Audio nao disponivel:', e);
+    }
   }, [soundEnabled]);
 
   const loadStats = useCallback(async (start, end, options = {}) => {
@@ -91,7 +118,6 @@ export default function Dashboard() {
         params: { start_date: start, end_date: end },
       });
       setStats(res.data);
-      setLastUpdated(new Date());
       return res.data;
     } catch (err) {
       console.error("Error loading stats:", err);
@@ -102,41 +128,44 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
+
+    const checkNewAppointments = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const res = await api.get(`/appointments?date=${today}&status=scheduled`);
+        const currentCount = res.data.length;
+
+        if (lastCountRef.current === null) {
+          lastCountRef.current = currentCount;
+          return;
+        }
+
+        if (currentCount > lastCountRef.current) {
+          const newCount = currentCount - lastCountRef.current;
+          setNewAppointments(prev => prev + newCount);
+          playNotificationSound();
+          toast.success(
+            `🗓️ ${newCount === 1 ? 'Novo agendamento!' : `${newCount} novos agendamentos!`}`,
+            { description: 'Um cliente acabou de agendar.', duration: 6000 }
+          );
+          loadStats(appliedRange.start, appliedRange.end, { silent: true });
+        }
+        lastCountRef.current = currentCount;
+      } catch (err) {}
+    };
+
+    checkNewAppointments();
+    const interval = setInterval(checkNewAppointments, 30000);
+    return () => clearInterval(interval);
+  }, [user, playNotificationSound, loadStats, appliedRange]);
+
+  useEffect(() => {
     loadStats(appliedRange.start, appliedRange.end);
   }, [appliedRange, loadStats]);
 
   useEffect(() => {
-    if (stats && lastTotalRef.current === null) {
-      lastTotalRef.current = stats.total_today || 0;
-    }
-  }, [stats]);
-
-  useEffect(() => {
-    if (!user) return undefined;
-    const interval = setInterval(async () => {
-      const data = await loadStats(appliedRange.start, appliedRange.end, { silent: true });
-      if (!data) return;
-      const totalToday = data.total_today || 0;
-      if (lastTotalRef.current !== null && totalToday > lastTotalRef.current) {
-        const diff = totalToday - lastTotalRef.current;
-        setNewAppointments((prev) => prev + diff);
-        toast.success("Novo agendamento recebido");
-        if (soundEnabled) {
-          playNotificationSound();
-        } else if (!soundPromptedRef.current) {
-          toast("Ative o som para alertas");
-          soundPromptedRef.current = true;
-        }
-      }
-      lastTotalRef.current = totalToday;
-    }, 20000);
-    return () => clearInterval(interval);
-  }, [appliedRange, loadStats, playNotificationSound, soundEnabled, user]);
-
-  useEffect(() => {
-    const handler = () => {
-      unlockSound();
-    };
+    const handler = () => { unlockSound(); };
     window.addEventListener("click", handler, { once: true });
     window.addEventListener("keydown", handler, { once: true });
     return () => {
@@ -145,381 +174,332 @@ export default function Dashboard() {
     };
   }, [unlockSound]);
 
-  const today = format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR });
-  const confirmationRate = Math.round((stats?.confirmation_rate || 0) * 100);
-  const noShowRate = Math.round((stats?.no_show_rate || 0) * 100);
   const applyRange = (start, end) => {
     setStartDate(start);
     setEndDate(end);
     setAppliedRange({ start, end });
     setFilterOpen(false);
-    lastTotalRef.current = null;
     setNewAppointments(0);
   };
 
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="h-8 w-48 bg-muted rounded animate-pulse" />
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="h-28 bg-muted rounded-xl animate-pulse" />
-          ))}
+        <div className="h-10 w-64 bg-muted rounded animate-pulse mb-8" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => <div key={i} className="h-32 bg-muted rounded-2xl animate-pulse" />)}
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6" data-testid="dashboard-page">
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2 shadow-soft border border-primary/10 bg-gradient-to-br from-primary/10 via-background to-background">
-          <CardContent className="pt-6 pb-5">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-primary/70 font-semibold">Painel profissional</p>
-                <h1 className="font-heading text-2xl md:text-3xl font-bold tracking-tight mt-1">
-                  Ola, {user?.name?.split(" ")[0]}
-                </h1>
-                <p className="text-sm text-muted-foreground capitalize mt-1">{today}</p>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-3">
-                  <span data-testid="dashboard-period-label">Periodo: {appliedRange.start} ate {appliedRange.end}</span>
-                  {lastUpdated && (
-                    <span className="inline-flex items-center gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Atualizado agora
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 items-center">
-                <Button
-                  variant={soundEnabled ? "default" : "outline"}
-                  size="sm"
-                  className="gap-2"
-                  onClick={async () => {
-                    if (soundEnabled) {
-                      setSoundEnabled(false);
-                      return;
-                    }
-                    const ok = await unlockSound();
-                    if (ok) playNotificationSound();
-                  }}
-                  data-testid="dashboard-toggle-sound"
-                >
-                  <Bell className="h-3.5 w-3.5" />
-                  {soundEnabled ? "Som ativo" : "Ativar som"}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => {
-                  setStartDate(appliedRange.start);
-                  setEndDate(appliedRange.end);
-                  setFilterOpen(true);
-                }} data-testid="dashboard-open-filter">
-                  Filtrar
-                </Button>
-                {user?.slug && (
-                  <a
-                    href={`/p/${user.slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    data-testid="dashboard-public-link"
-                  >
-                    <Button variant="outline" size="sm" className="gap-2">
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      Minha pagina
-                    </Button>
-                  </a>
-                )}
-              </div>
-            </div>
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 rounded-full border border-primary/20 bg-background/60 px-3 py-1.5 text-xs">
-                <span className="text-muted-foreground">Novos hoje</span>
-                <span className="font-semibold text-primary">{stats?.total_today || 0}</span>
-                {newAppointments > 0 && (
-                  <Badge className="ml-1 bg-primary text-primary-foreground animate-pulse">+{newAppointments}</Badge>
-                )}
-              </div>
-              <div className="flex items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1.5 text-xs">
-                <span className="text-muted-foreground">Confirmacao</span>
-                <span className="font-semibold">{confirmationRate}%</span>
-              </div>
-              <div className="flex items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1.5 text-xs">
-                <span className="text-muted-foreground">Receita</span>
-                <span className="font-semibold">R$ {(stats?.revenue_period || 0).toFixed(0)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+  const confirmationRate = Math.round((stats?.confirmation_rate || 0) * 100);
 
-        <Card className="shadow-soft">
-          <CardHeader className="pb-2">
-            <CardTitle className="font-heading text-lg">Acoes rapidas</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Link to="/agenda" onClick={() => setNewAppointments(0)}>
-              <Button className="w-full justify-between">
-                Agenda de hoje
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link to="/clientes">
-              <Button variant="outline" className="w-full justify-between">
-                Gerenciar clientes
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link to="/servicos">
-              <Button variant="outline" className="w-full justify-between">
-                Ajustar servicos
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <Link to="/configuracoes">
-              <Button variant="outline" className="w-full justify-between">
-                Configuracoes
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
+  return (
+    <div className="space-y-8 font-sans pb-10" data-testid="dashboard-page">
+      <OnboardingWizard open={showOnboarding} onComplete={() => setShowOnboarding(false)} />
+      
+      {/* Top Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-black font-heading text-foreground tracking-tight">Dashboard Overview</h1>
+          <p className="text-sm text-muted-foreground font-medium mt-1">Bem-vindo de volta, {(user?.name || "").split(" ")[0]}</p>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative hidden md:block">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Buscar agendamentos..." 
+              className="pl-10 mr-2 w-64 bg-white border-border/60 rounded-full h-[42px] font-medium text-sm hover:border-border focus:border-[#00D49D] shadow-sm transition-all" 
+            />
+          </div>
+          
+          {user?.slug && (
+            <Button variant="outline" className="rounded-full h-[42px] font-bold border-border/60 bg-white text-foreground hover:bg-neutral-50 shadow-sm transition-all" onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/p/${user.slug}`);
+              toast.success("Link copiado!");
+            }}>
+              <Share2 className="h-4 w-4 mr-2 text-muted-foreground" /> Compartilhar Link
+            </Button>
+          )}
+
+          <Link to="/agenda">
+            <Button className="rounded-full h-[42px] bg-[#00D49D] hover:bg-[#00B98A] text-white font-bold px-5 shadow-lg shadow-[#00D49D]/20 active:scale-95 transition-all">
+              <Plus className="h-4 w-4 mr-1.5" /> Novo Horario
+            </Button>
+          </Link>
+          
+          <div className="h-10 w-px bg-border/50 mx-1 hidden md:block" />
+          
+          <Avatar className="h-[42px] w-[42px] border-2 border-white shadow-sm shrink-0">
+            <AvatarImage src={user?.picture} />
+            <AvatarFallback className="bg-primary/5 text-primary font-bold text-sm tracking-widest">{initials}</AvatarFallback>
+          </Avatar>
+        </div>
       </div>
 
       <Dialog open={filterOpen} onOpenChange={setFilterOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Filtrar metricas</DialogTitle>
+            <DialogTitle className="font-heading font-bold text-xl">Filtrar Metricas</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Data inicial</p>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} data-testid="dashboard-start-date" />
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Data inicial</p>
+                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-xl h-11 border-border/60" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Data final</p>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} data-testid="dashboard-end-date" />
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Data final</p>
+                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-xl h-11 border-border/60" />
               </div>
             </div>
             <div className="grid sm:grid-cols-3 gap-2">
-              <Button variant="outline" size="sm" onClick={() => {
+              <Button variant="outline" size="sm" className="h-9 rounded-lg font-semibold border-border/60" onClick={() => {
                 const end = new Date();
                 const start = new Date();
                 start.setDate(end.getDate() - 6);
                 applyRange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"));
-              }} data-testid="dashboard-filter-7d">
-                Ultimos 7 dias
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => {
+              }}>Ultimos 7 dias</Button>
+              <Button variant="outline" size="sm" className="h-9 rounded-lg font-semibold border-border/60" onClick={() => {
                 const end = new Date();
                 const start = new Date();
                 start.setDate(end.getDate() - 29);
                 applyRange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"));
-              }} data-testid="dashboard-filter-30d">
-                Ultimos 30 dias
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => {
+              }}>Ultimos 30 dias</Button>
+              <Button variant="outline" size="sm" className="h-9 rounded-lg font-semibold border-border/60" onClick={() => {
                 const end = new Date();
                 const start = new Date(end.getFullYear(), end.getMonth(), 1);
                 applyRange(format(start, "yyyy-MM-dd"), format(end, "yyyy-MM-dd"));
-              }} data-testid="dashboard-filter-month">
-                Este mes
-              </Button>
+              }}>Este mes</Button>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setStartDate(appliedRange.start);
-              setEndDate(appliedRange.end);
-              setFilterOpen(false);
-            }} data-testid="dashboard-filter-cancel">
-              Cancelar
-            </Button>
-            <Button onClick={() => applyRange(startDate, endDate)} data-testid="dashboard-apply-filter">
-              Aplicar filtro
+          <DialogFooter className="mt-2 text-right flex items-center justify-end gap-2">
+            <Button variant="ghost" className="font-bold text-muted-foreground rounded-xl h-11" onClick={() => setFilterOpen(false)}>Cancelar</Button>
+            <Button className="bg-[#00D49D] hover:bg-[#00B98A] text-white font-bold rounded-xl h-11 px-6 shadow-md shadow-[#00D49D]/20 active:scale-95 transition-all" onClick={() => applyRange(startDate, endDate)}>
+              Aplicar Filtro
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <Card className={`shadow-soft ${newAppointments > 0 ? "ring-2 ring-primary/30" : ""}`} data-testid="stat-today">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <CalendarDays className="h-5 w-5 text-primary" />
+      {/* Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="shadow-sm border-border/50 rounded-2xl flex flex-col justify-between">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-10 w-10 rounded-xl bg-[#00D49D]/10 flex items-center justify-center shrink-0">
+                <CalendarDays className="h-5 w-5 text-[#00D49D]" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-2xl font-bold font-heading">{stats?.total_today || 0}</p>
-                  {newAppointments > 0 && (
-                    <Badge className="bg-primary text-primary-foreground text-[10px]">+{newAppointments}</Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">Hoje</p>
-              </div>
+              <Badge variant="secondary" className="bg-[#00D49D]/10 text-[#00D49D] hover:bg-[#00D49D]/10 font-bold border-transparent text-[11px] px-2 py-0.5">
+                +12%
+              </Badge>
             </div>
+            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Agendamentos do dia</p>
+            <p className="text-3xl font-black font-heading text-foreground">{stats?.total_today || 0}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-soft" data-testid="stat-confirmation-rate">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-teal-100 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="h-5 w-5 text-teal-700" />
+        
+        <Card className="shadow-sm border-border/50 rounded-2xl flex flex-col justify-between">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="h-5 w-5 text-blue-500" />
               </div>
-              <div>
-                <p className="text-2xl font-bold font-heading">{confirmationRate}%</p>
-                <p className="text-xs text-muted-foreground">Taxa de confirmacao</p>
-              </div>
+              <Badge variant="secondary" className="bg-blue-50 text-blue-600 hover:bg-blue-50 font-bold border-transparent text-[11px] px-2 py-0.5">
+                +5%
+              </Badge>
             </div>
+            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Taxa de confirmacao</p>
+            <p className="text-3xl font-black font-heading text-foreground">{confirmationRate}%</p>
           </CardContent>
         </Card>
-        <Card className="shadow-soft" data-testid="stat-no-show-rate">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
-                <Clock className="h-5 w-5 text-amber-700" />
+        
+        <Card className="shadow-sm border-border/50 rounded-2xl flex flex-col justify-between">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-10 w-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+                <DollarSign className="h-5 w-5 text-purple-600" />
               </div>
-              <div>
-                <p className="text-2xl font-bold font-heading">{noShowRate}%</p>
-                <p className="text-xs text-muted-foreground">Taxa de no-show</p>
-              </div>
+              <Badge variant="secondary" className="bg-neutral-100 text-muted-foreground hover:bg-neutral-100 font-bold border-transparent text-[11px] px-2 py-0.5">
+                Mensal
+              </Badge>
             </div>
+            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Faturamento Estimado</p>
+            <p className="text-3xl font-black font-heading text-foreground">R$ {(stats?.revenue_period || 0).toFixed(0)}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-soft" data-testid="stat-revenue-period">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                <DollarSign className="h-5 w-5 text-emerald-700" />
+
+        <Card className="shadow-sm border-border/50 rounded-2xl flex flex-col justify-between">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="h-10 w-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
+                <Users className="h-5 w-5 text-orange-500" />
               </div>
-              <div>
-                <p className="text-2xl font-bold font-heading">
-                  R$ {(stats?.revenue_period || 0).toFixed(0)}
-                </p>
-                <p className="text-xs text-muted-foreground">Receita no periodo</p>
-              </div>
+              <Badge variant="secondary" className="bg-red-50 text-red-500 hover:bg-red-50 font-bold border-transparent text-[11px] px-2 py-0.5">
+                -2%
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-soft" data-testid="stat-ticket-avg">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-                <TrendingUp className="h-5 w-5 text-indigo-700" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold font-heading">
-                  R$ {(stats?.ticket_avg || 0).toFixed(0)}
-                </p>
-                <p className="text-xs text-muted-foreground">Ticket medio</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-soft" data-testid="stat-clients">
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
-                <Users className="h-5 w-5 text-blue-700" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold font-heading">{stats?.total_clients || 0}</p>
-                <p className="text-xs text-muted-foreground">Clientes</p>
-              </div>
-            </div>
+            <p className="text-[13px] text-[#64748B] font-semibold tracking-wide mb-1">Visitas no Link</p>
+            <p className="text-3xl font-black font-heading text-foreground">248</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Today's Agenda + Upcoming */}
+      {/* Main Bottom Section */}
       <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Card className="shadow-soft" data-testid="today-agenda-card">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="font-heading text-lg">Agenda de hoje</CardTitle>
-                <Link to="/agenda" onClick={() => setNewAppointments(0)}>
-                  <Button variant="ghost" size="sm" className="text-xs gap-1" data-testid="go-to-calendar-btn">
-                    Ver tudo <ArrowRight className="h-3 w-3" />
-                  </Button>
-                </Link>
+        
+        {/* Left Col */}
+        <div className="lg:col-span-2 space-y-6 flex flex-col">
+          {/* Recent Appointments Table */}
+          <Card className="shadow-sm border-border/50 rounded-2xl overflow-hidden h-full flex flex-col">
+            <CardHeader className="pb-4 pt-5 px-6 border-b border-border/30 bg-white">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <CardTitle className="font-heading text-[17px] font-black tracking-tight">Agendamentos Recentes</CardTitle>
+                <div className="flex items-center gap-2">
+                   <Button variant="outline" size="sm" className="rounded-full h-8 px-4 text-[12px] font-bold border-border/60 hover:bg-neutral-50" onClick={() => setFilterOpen(true)}>
+                     Filtrar Data
+                   </Button>
+                   <Link to="/agenda">
+                     <Button variant="outline" size="sm" className="rounded-full h-8 px-4 text-[12px] font-bold border-border/60 hover:bg-neutral-50">
+                       Ver Todos
+                     </Button>
+                   </Link>
+                </div>
               </div>
             </CardHeader>
-            <CardContent>
-              {!stats?.today_appointments?.length ? (
-                <div className="text-center py-8">
-                  <CalendarDays className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">Nenhum agendamento hoje</p>
-                  <Link to="/agenda">
-                    <Button variant="link" size="sm" className="mt-2 text-primary" data-testid="add-appointment-link">
-                      Adicionar agendamento
-                    </Button>
-                  </Link>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {stats.today_appointments.map((apt, i) => (
-                    <div
-                      key={apt.appointment_id}
-                      className={`stagger-item flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors`}
-                      data-testid={`today-apt-${i}`}
-                    >
-                      <div className="text-center shrink-0 w-14">
-                        <p className="text-sm font-semibold">{apt.start_time}</p>
-                        <p className="text-xs text-muted-foreground">{apt.end_time}</p>
-                      </div>
-                      <Separator orientation="vertical" className="h-10" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{apt.client_name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{apt.service_name}</p>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={`status-badge status-${apt.status} text-xs shrink-0`}
-                      >
-                        {statusLabels[apt.status] || apt.status}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <CardContent className="p-0 flex-1 bg-white">
+               <div className="overflow-x-auto h-full">
+                 <table className="w-full text-sm text-left">
+                   <thead className="text-[10px] text-[#64748B] font-black tracking-widest uppercase bg-neutral-50/50 border-b border-border/30">
+                     <tr>
+                       <th className="px-6 py-4 font-black">Cliente</th>
+                       <th className="px-6 py-4 font-black">Servico</th>
+                       <th className="px-6 py-4 font-black">Data/Hora</th>
+                       <th className="px-6 py-4 font-black">Status</th>
+                       <th className="px-6 py-4 font-black text-right">Acoes</th>
+                     </tr>
+                   </thead>
+                   <tbody className="divide-y divide-border/30">
+                     {(!stats?.today_appointments?.length) ? (
+                        <tr>
+                          <td colSpan="5" className="text-center py-16 px-4">
+                            <CalendarDays className="h-8 w-8 mx-auto text-muted-foreground/30 mb-3" />
+                            <p className="text-[13px] font-medium text-[#64748B]">Nenhum agendamento recente para o periodo selecionado.</p>
+                          </td>
+                        </tr>
+                     ) : (
+                       stats.today_appointments.map((apt) => {
+                         const aptInitials = apt.client_name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+                         
+                         let badgeClasses = "bg-neutral-100 text-neutral-600";
+                         if (apt.status === "confirmed") badgeClasses = "bg-emerald-50 text-emerald-600";
+                         else if (apt.status === "scheduled") badgeClasses = "bg-blue-50 text-blue-600";
+                         else if (apt.status === "cancelled") badgeClasses = "bg-red-50 text-red-600";
+                         
+                         return (
+                           <tr key={apt.appointment_id} className="hover:bg-neutral-50/70 transition-colors bg-white">
+                             <td className="px-6 py-4">
+                               <div className="flex items-center gap-3">
+                                 <Avatar className="h-[34px] w-[34px]">
+                                   <AvatarFallback className="bg-primary/5 text-primary text-[11px] font-bold">{aptInitials}</AvatarFallback>
+                                 </Avatar>
+                                 <p className="font-bold text-foreground text-[13px]">{apt.client_name}</p>
+                               </div>
+                             </td>
+                             <td className="px-6 py-4 font-semibold text-[#64748B] text-[13px]">{apt.service_name}</td>
+                             <td className="px-6 py-4 font-semibold text-[#64748B] text-[13px]">{apt.start_time} - {apt.end_time}</td>
+                             <td className="px-6 py-4">
+                               <Badge variant="outline" className={`status-badge text-[9px] px-2 py-0.5 font-bold tracking-widest border-transparent uppercase ${badgeClasses}`}>
+                                 {statusLabels[apt.status] || apt.status}
+                               </Badge>
+                             </td>
+                             <td className="px-6 py-4 text-right">
+                               <Link to="/agenda">
+                                 <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-muted-foreground hover:text-primary hover:bg-primary/5">
+                                   <ArrowRight className="h-4 w-4" />
+                                 </Button>
+                               </Link>
+                             </td>
+                           </tr>
+                         )
+                       })
+                     )}
+                   </tbody>
+                 </table>
+               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div>
-          <Card className="shadow-soft" data-testid="upcoming-card">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-heading text-lg">Proximos</CardTitle>
+        {/* Right Col */}
+        <div className="space-y-6 flex flex-col">
+          <Card className="shadow-sm border-border/50 rounded-2xl flex-1 flex flex-col">
+            <CardHeader className="pb-4 pt-5 px-5 border-b border-border/30 bg-white rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <CardTitle className="font-heading text-[17px] font-black tracking-tight">Proximos Clientes</CardTitle>
+                <Link to="/agenda" className="text-[12px] font-bold text-[#00D49D] hover:underline">Ver todos</Link>
+              </div>
             </CardHeader>
-            <CardContent>
-              {!stats?.upcoming?.length ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Sem agendamentos futuros
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {stats.upcoming.map((apt, i) => (
-                    <div key={apt.appointment_id} className="flex items-start gap-3 stagger-item" data-testid={`upcoming-apt-${i}`}>
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                        <Clock className="h-4 w-4 text-primary" />
+            <CardContent className="p-0 flex-1 bg-white rounded-b-2xl">
+              <div className="divide-y divide-border/30 h-full">
+                {!stats?.upcoming?.length ? (
+                  <div className="py-12 px-4 flex flex-col items-center text-center">
+                     <Clock className="h-8 w-8 text-muted-foreground/30 mb-3" />
+                     <p className="text-[13px] font-medium text-[#64748B]">Sua agenda futura esta livre no momento.</p>
+                  </div>
+                ) : (
+                  stats.upcoming.slice(0,5).map((apt, i) => {
+                    const aptInitials = apt.client_name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
+                    return (
+                      <div key={apt.appointment_id} className="flex items-center justify-between p-5 hover:bg-neutral-50/70 transition-colors">
+                        <div className="flex items-center gap-3.5">
+                           <Avatar className="h-[42px] w-[42px]">
+                             <AvatarFallback className="bg-primary/5 text-primary text-[12px] font-bold">{aptInitials}</AvatarFallback>
+                           </Avatar>
+                           <div>
+                             <p className="font-bold text-[14px] leading-snug text-foreground">{apt.client_name}</p>
+                             <p className="text-[12px] text-[#64748B] font-semibold mt-0.5">{apt.start_time} • {apt.service_name}</p>
+                           </div>
+                        </div>
+                        {apt.client_phone && (
+                          <a href={`https://wa.me/55${apt.client_phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">
+                            <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100/80 hover:text-emerald-700 transition-colors shrink-0">
+                              <MessageCircle className="h-[18px] w-[18px]" />
+                            </Button>
+                          </a>
+                        )}
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{apt.client_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {apt.date} as {apt.start_time}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">{apt.service_name}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    )
+                  })
+                )}
+              </div>
             </CardContent>
           </Card>
+
+          {user?.slug && (
+            <Card className="shadow-sm border-[#00D49D]/20 bg-[#00D49D]/[0.02] rounded-2xl shrink-0">
+              <CardContent className="p-5">
+                <p className="text-[10px] text-[#00D49D] font-black tracking-widest uppercase mb-2.5 flex items-center gap-1.5">
+                  <LinkIcon className="h-3 w-3 stroke-[3]" /> Status do Link
+                </p>
+                <div className="flex items-center justify-between bg-white border border-[#00D49D]/20 rounded-xl px-3.5 py-2.5 shadow-sm">
+                  <p className="font-bold text-[13px] text-foreground truncate">
+                    agendazap.com/{user.slug}
+                  </p>
+                  <Button variant="ghost" size="icon" className="h-[28px] w-[28px] rounded-lg text-[#00D49D] hover:bg-[#00D49D]/10 shrink-0 ml-2" onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/p/${user.slug}`);
+                    toast.success("Link copiado!");
+                  }}>
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
+        
       </div>
     </div>
   );
