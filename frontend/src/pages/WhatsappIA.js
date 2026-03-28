@@ -90,7 +90,7 @@ export default function WhatsappIA() {
                 value={config?.n8n_api_key || ""}
                 disabled
               />
-              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Gerada automaticamente pelo ClickAgenda</p>
+              <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">Gerada automaticamente pelo SalãoZap</p>
             </div>
             <div className="space-y-2">
               <Label>Número WhatsApp conectado</Label>
@@ -135,7 +135,7 @@ export default function WhatsappIA() {
             <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border/50">
               <div className="space-y-0.5">
                 <Label className="text-base">Atendimento Ativo</Label>
-                <p className="text-xs text-muted-foreground">Ativar/Desativar processamento via ClickAgenda.</p>
+                <p className="text-xs text-muted-foreground">Ativar/Desativar processamento via SalãoZap.</p>
               </div>
               <Switch 
                 checked={config?.is_active || false}

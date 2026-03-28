@@ -94,7 +94,7 @@ export default function ClientReview() {
           <p className="text-[#64748B] text-sm max-w-[280px] mx-auto leading-relaxed mb-8">
             Sua opinião é muito importante para continuarmos melhorando nossos serviços e ajudando outros clientes.
           </p>
-          <div className="font-heading font-bold text-[#00D49D] text-lg">ClickAgenda</div>
+          <span className="font-heading font-bold text-2xl text-primary">SalãoZap</span>
         </Card>
       </div>
     );
@@ -115,7 +115,7 @@ export default function ClientReview() {
       <div className="mb-6 flex justify-center">
         <div className="flex items-center gap-2 font-heading font-bold text-lg text-foreground bg-white px-4 py-2 rounded-full shadow-sm">
           <div className="h-6 w-6 rounded-md bg-[#00D49D] text-white flex items-center justify-center text-xs">C</div>
-          ClickAgenda
+          SalãoZap
         </div>
       </div>
 
@@ -185,7 +185,7 @@ export default function ClientReview() {
         </CardContent>
       </Card>
       <p className="text-[11px] text-muted-foreground/60 mt-8 font-medium">
-        Powered by ClickAgenda
+        Powered by SalãoZap
       </p>
     </div>
   );

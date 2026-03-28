@@ -1,4 +1,4 @@
-# Auth Testing Playbook for Click Agenda
+# Auth Testing Playbook for SalãoZap
 
 ## Step 1: Create Test User & Session
 ```bash

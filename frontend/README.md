@@ -74,7 +74,7 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/t
 Antes de gerar o build de produção, defina a variável de ambiente `REACT_APP_BACKEND_URL` com a URL pública do seu backend:
 
 ```bash
-REACT_APP_BACKEND_URL=https://api.clickagenda.com.br npm run build
+REACT_APP_BACKEND_URL=https://api.salaozap.com.br npm run build
 ```
 
 Ou copie `.env.production.example` para `.env.production` e preencha o valor:
@@ -85,4 +85,4 @@ cp .env.production.example .env.production
 npm run build
 ```
 
-> **Atenção:** sem esta variável definida, o frontend tentará conectar ao backend na porta 8000 do mesmo host — o que não funciona em produção com proxy reverso (nginx, Cloudflare Tunnel, etc).
+> **Atenção:** sem esta variável # SalãoZap - Frontend tentará conectar ao backend na porta 8000 do mesmo host — o que não funciona em produção com proxy reverso (nginx, Cloudflare Tunnel, etc).

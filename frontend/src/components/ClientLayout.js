@@ -39,7 +39,7 @@ function ClientSidebar({ onClose }) {
   return (
     <aside className="flex flex-col h-full w-64 bg-card border-r border-border" data-testid="client-sidebar">
       <div className="p-6">
-        <h1 className="font-heading text-xl font-bold tracking-tight text-primary">Slotu</h1>
+        <h1 className="font-heading text-xl font-bold tracking-tight text-primary">SalãoZap</h1>
         <p className="text-xs text-muted-foreground mt-0.5">Seu slot, sua agenda.</p>
       </div>
       <Separator />
@@ -101,7 +101,7 @@ export default function ClientLayout({ children }) {
             <ClientSidebar onClose={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
-        <span className="font-heading font-bold text-primary text-lg">Slotu</span>
+        <span className="font-heading font-bold text-primary text-lg">SalãoZap</span>
       </div>
       <main className="flex-1 md:ml-64 pt-16 md:pt-0 overflow-x-hidden">
         <div className="p-4 md:p-8 max-w-7xl mx-auto animate-fade-in w-full">{children}</div>

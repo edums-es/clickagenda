@@ -26,7 +26,7 @@ export default function DashboardLayout({ children }) {
             <Sidebar onClose={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
-        <span className="font-heading font-bold text-primary text-lg">Slotu</span>
+        <span className="font-heading font-bold text-lg tracking-tight text-primary">SalãoZap</span>
       </div>
 
       {/* Main content */}

@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 # ==================== EMAIL (RESEND) ====================
 resend.api_key = os.environ.get("RESEND_API_KEY", "")
-EMAIL_FROM = os.environ.get("EMAIL_FROM", "noreply@clickagenda.com.br")
+EMAIL_FROM = os.environ.get("EMAIL_FROM", "noreply@salaozap.com.br")
 EMAIL_ENABLED = bool(os.environ.get("RESEND_API_KEY", ""))
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
@@ -68,7 +68,7 @@ if R2_ENABLED:
         config=BotocoreConfig(signature_version="s3v4"),
         region_name="auto",
     )
-    R2_BUCKET = os.environ.get("R2_BUCKET_NAME", "clickagenda-uploads")
+    R2_BUCKET = os.environ.get("R2_BUCKET_NAME", "salaozap-uploads")
     R2_PUBLIC_URL = os.environ.get("R2_PUBLIC_URL", "").rstrip("/")
 else:
     r2_client = None
@@ -352,7 +352,7 @@ async def calculate_slots(user_id: str, date_str: str, service_id: str):
     buffer = service.get("buffer_minutes", 0)
 
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
-    min_advance = user.get("min_advance_hours", 2) if user else 2
+    min_advance = user.get("min_advance_hours", 0) if user else 0
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
     day_of_week = date_obj.weekday()
@@ -461,7 +461,7 @@ async def register(request: Request, data: UserRegister, response: Response):
         "state": "",
         "social_links": {},
         "featured_service_ids": [],
-        "min_advance_hours": 2,
+        "min_advance_hours": 0,
         "cancellation_policy_hours": 6,
         "onboarding_completed": False,
         "plan": "free",
@@ -563,7 +563,7 @@ async def google_session(request: Request, response: Response):
             "state": "",
             "social_links": {},
             "featured_service_ids": [],
-            "min_advance_hours": 2,
+            "min_advance_hours": 0,
             "cancellation_policy_hours": 6,
             "onboarding_completed": False,
             "plan": "free",
@@ -650,7 +650,7 @@ async def forgot_password(request: Request, data: PasswordResetRequest):
     if EMAIL_ENABLED:
         html = f"""
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-          <h2 style="color:#6366f1;">Redefinição de senha — Slotu</h2>
+          <h2 style="color:#6366f1;">Redefinição de senha — SalãoZap</h2>
           <p>Você solicitou a redefinição da sua senha. Clique no botão abaixo para criar uma nova senha:</p>
           <p><a href="{reset_link}" style="background:#6366f1;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">Redefinir minha senha</a></p>
           <p style="color:#888;font-size:12px;">Este link expira em 1 hora. Se você não solicitou, ignore este e-mail.</p>
@@ -660,7 +660,7 @@ async def forgot_password(request: Request, data: PasswordResetRequest):
             resend.Emails.send({
                 "from": EMAIL_FROM,
                 "to": [data.email],
-                "subject": "Redefinição de senha — Slotu",
+                "subject": "Redefinição de senha — SalãoZap",
                 "html": html,
             })
         except Exception as exc:
@@ -1366,7 +1366,7 @@ async def send_confirmation_email(
 
     html_body = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <h2 style="color: #6366f1;">Slotu — Agendamento Confirmado ✅</h2>
+      <h2 style="color: #6366f1;">SalãoZap — Agendamento Confirmado ✅</h2>
       <p>Olá, <strong>{recipient_name}</strong>!</p>
       <p>Seu agendamento foi {'confirmado' if recipient == 'client' else 'recebido'} com sucesso.</p>
       <table style="width:100%; border-collapse:collapse; margin: 16px 0;">
@@ -1382,7 +1382,7 @@ async def send_confirmation_email(
             <td style="padding:8px;">{appointment.get('client_phone', '')}</td></tr>
       </table>
       {'<p><a href="' + manage_link + '" style="background:#6366f1;color:white;padding:10px 20px;text-decoration:none;border-radius:6px;">Gerenciar Agendamento</a></p>' if manage_link else ''}
-      <p style="color:#888; font-size:12px;">Agendado via Slotu</p>
+      <p style="color:#888; font-size:12px;">Agendado via SalãoZap</p>
     </div>
     """
 
@@ -1938,7 +1938,7 @@ async def get_whatsapp_config(user=Depends(get_current_user)):
     if not config:
         config = {
             "user_id": user_id,
-            "instance_name": f"clickagenda_{user_id.replace('-', '')}",
+            "instance_name": f"salaozap_{user_id.replace('-', '')}",
             "is_active": False,
             "ai_prompt": "Você é um assistente virtual de agendamento amigável e direto. Ajude o cliente a decidir o serviço e mostre horários. Sempre confirme data e hora.",
             "status": "DISCONNECTED"
@@ -2549,7 +2549,7 @@ async def get_dashboard_stats(user: dict = Depends(get_current_user)):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Click Agenda API", "version": "1.0.0"}
+    return {"message": "SalãoZap API", "version": "1.0.0"}
 
 app.include_router(api_router)
 
@@ -2614,7 +2614,7 @@ async def startup():
     # TTL index para tokens de reset de senha (Fix 2)
     await db.password_reset_tokens.create_index("token", unique=True, background=True)
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0, background=True)
-    logger.info("Click Agenda API started successfully")
+    logger.info("SalãoZap API started successfully")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

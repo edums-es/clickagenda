@@ -85,7 +85,7 @@ export default function Register() {
           </Link>
           <div className="flex items-center justify-center gap-2 mb-2">
             <CalendarDays className="h-7 w-7 text-primary" />
-            <span className="font-heading font-bold text-2xl">Click Agenda</span>
+            <span className="font-heading font-bold text-2xl">SalãoZap</span>
           </div>
           <p className="text-sm text-muted-foreground">Crie sua conta gratis</p>
         </div>

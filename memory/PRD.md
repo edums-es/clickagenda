@@ -1,4 +1,4 @@
-# Click Agenda - PRD (Product Requirements Document)
+# SalãoZap - PRD (Product Requirements Document)
 
 ## Problema Original
 Plataforma web PWA de gestao + agendamento inteligente para profissionais (saloes, clinicas, terapeutas).

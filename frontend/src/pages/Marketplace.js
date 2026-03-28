@@ -149,7 +149,7 @@ export default function Marketplace() {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-2 mb-2">
             <CalendarDays className="h-6 w-6 text-primary" />
-            <Link to="/" className="font-heading font-bold text-xl text-primary">Click Agenda</Link>
+            <Link to="/" className="font-heading font-bold text-xl text-primary">SalãoZap</Link>
           </div>
           <h1 className="font-heading text-3xl md:text-4xl font-bold tracking-tight mt-4" data-testid="marketplace-title">
             Encontre profissionais perto de voce

@@ -235,7 +235,7 @@ export default function OnboardingWizard({ open, onComplete }) {
               <div className="p-4 bg-muted/50 rounded-lg border flex flex-col items-center gap-3">
                 <p className="text-sm font-medium text-muted-foreground">Seu link publico:</p>
                 <code className="text-lg font-mono bg-background px-3 py-1 rounded border">
-                  slotu.app/p/{user?.slug}
+                  salaozap.com/p/{user?.slug}
                 </code>
               </div>
               
@@ -256,7 +256,7 @@ export default function OnboardingWizard({ open, onComplete }) {
                   size="lg" 
                   className="w-full border-teal-200 text-teal-700 hover:bg-teal-50 hover:text-teal-800"
                   onClick={() => {
-                    const text = `Agende comigo pelo Slotu: ${publicLink}`;
+                    const text = `Agende comigo pelo SalãoZap: ${publicLink}`;
                     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
                   }}
                 >

@@ -78,7 +78,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto flex items-center justify-between h-16">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-6 w-6 text-primary" />
-            <span className="font-heading font-bold text-xl tracking-tight">Click Agenda</span>
+            <span className="font-heading font-bold text-xl tracking-tight">SalãoZap</span>
           </div>
           <div className="flex items-center gap-3">
             <Link to="/planos">
@@ -294,7 +294,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-primary" />
-            <span className="font-heading font-bold">Slotu</span>
+            <span className="font-heading font-bold">SalãoZap</span>
           </div>
           <p className="text-sm text-muted-foreground">
             Seu slot, sua agenda. Todos os direitos reservados.

@@ -46,7 +46,7 @@ export default function Login() {
           </Link>
           <div className="flex items-center gap-2">
             <CalendarDays className="h-8 w-8 text-primary" />
-            <span className="font-heading font-bold text-3xl">Slotu</span>
+            <span className="font-heading font-bold text-2xl">SalãoZap</span>
           </div>
           <div>
             <h1 className="font-heading text-3xl md:text-4xl font-bold tracking-tight">

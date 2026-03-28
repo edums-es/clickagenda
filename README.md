@@ -1,4 +1,4 @@
-# ClickAgenda
+# SalãoZap
 
 Plataforma de agendamento online para profissionais autônomos e pequenos negócios. 
 Link público personalizável, agenda inteligente e notificações via WhatsApp.

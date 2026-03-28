@@ -1,11 +1,11 @@
 {
-  "name": "Click Agenda",
-  "short_name": "Click Agenda",
+  "name": "SalãoZap - Agendamento Inteligente",
+  "short_name": "SalãoZap",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0f766e",
-  "description": "Click Agenda - Clicou, agendou!",
+  "description": "SalãoZap - Clicou, agendou!",
   "icons": [
     {
       "src": "/pwa-icon.svg",
