@@ -1,0 +1,10 @@
+{
+  "build": {
+    "env": {
+      "REACT_APP_BACKEND_URL": "https://clickagenda-production.up.railway.app"
+    }
+  },
+  "env": {
+    "REACT_APP_BACKEND_URL": "https://clickagenda-production.up.railway.app"
+  }
+}

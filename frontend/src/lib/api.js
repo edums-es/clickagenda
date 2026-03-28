@@ -2,7 +2,7 @@ import axios from "axios";
 import { toast } from "sonner";
 
 const defaultBackendUrl = `${window.location.protocol}//${window.location.hostname}:8000`;
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || defaultBackendUrl;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || defaultBackendUrl;
 
 const api = axios.create({
   baseURL: `${BACKEND_URL}/api`,
