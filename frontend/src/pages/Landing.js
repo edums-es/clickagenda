@@ -4,65 +4,21 @@ import { Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   CalendarDays,
-  Clock,
+  Check,
+  ArrowRight,
+  Zap,
   Users,
   MessageSquare,
-  ArrowRight,
-  CheckCircle2,
-  Zap,
-  Globe,
+  Clock,
+  Smartphone,
+  Calendar,
+  Star,
+  ShieldCheck,
+  ArrowUpRight,
+  Layout,
+  MousePointer2,
+  Bell
 } from "lucide-react";
-
-const features = [
-  {
-    icon: CalendarDays,
-    title: "Agenda Inteligente",
-    desc: "Visao diaria e semanal com controle total dos seus horarios, pausas e feriados.",
-  },
-  {
-    icon: Globe,
-    title: "Pagina Publica",
-    desc: "Seu link exclusivo para compartilhar. Clientes agendam direto, sem ligacao.",
-  },
-  {
-    icon: MessageSquare,
-    title: "WhatsApp Automatico",
-    desc: "Confirmacao e lembretes enviados automaticamente para voce e seu cliente.",
-  },
-  {
-    icon: Users,
-    title: "Gestao de Clientes",
-    desc: "Historico completo, observacoes e tags para conhecer cada cliente de verdade.",
-  },
-];
-
-const steps = [
-  { num: "01", title: "Configure", desc: "Cadastre seus servicos, horarios e pausas em minutos." },
-  { num: "02", title: "Compartilhe", desc: "Envie seu link exclusivo no WhatsApp, Instagram ou onde quiser." },
-  { num: "03", title: "Receba", desc: "Clientes agendam sozinhos. Voce recebe a notificacao e gerencia tudo." },
-];
-
-const plans = [
-  {
-    name: "Start",
-    price: "Gratis",
-    desc: "Para testar a agenda e receber seus primeiros agendamentos.",
-    features: ["Pagina publica personalizada", "Lembretes por WhatsApp", "Agenda basica"],
-  },
-  {
-    name: "Pro",
-    price: "R$ 49",
-    desc: "Para profissionais com agenda cheia e recorrencia.",
-    features: ["Tudo do Start", "Servicos em destaque", "Relatorios essenciais"],
-    highlight: true,
-  },
-  {
-    name: "Studio",
-    price: "R$ 99",
-    desc: "Para equipes e negocios com varios profissionais.",
-    features: ["Tudo do Pro", "Equipe multipla", "Suporte prioritario"],
-  },
-];
 
 export default function Landing() {
   const { user, loading } = useAuth();
@@ -72,193 +28,322 @@ export default function Landing() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Nav */}
-      <nav className="glass-nav fixed top-0 left-0 right-0 z-50 px-4 md:px-8" data-testid="landing-nav">
-        <div className="max-w-7xl mx-auto flex items-center justify-between h-16">
+    <div className="min-h-screen bg-white font-body selection:bg-primary/20">
+      {/* Navbar */}
+      <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-20">
           <div className="flex items-center gap-2">
-            <CalendarDays className="h-6 w-6 text-primary" />
-            <span className="font-heading font-bold text-xl tracking-tight">SalãoZap</span>
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
+              <CalendarDays className="w-6 h-6" />
+            </div>
+            <span className="text-2xl font-bold font-heading text-gray-900 tracking-tight">SalãoZap</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Link to="/planos">
-              <Button variant="ghost" className="text-sm">
-                Planos
-              </Button>
-            </Link>
-            <Link to="/login">
-              <Button variant="ghost" data-testid="landing-login-btn" className="text-sm">
-                Entrar
-              </Button>
-            </Link>
+
+          <nav className="hidden lg:flex items-center gap-8 text-sm font-medium text-gray-600">
+            <a href="#funcionalidades" className="hover:text-primary transition-colors">Funcionalidades</a>
+            <a href="#como-funciona" className="hover:text-primary transition-colors">Como funciona</a>
+            <a href="#precos" className="hover:text-primary transition-colors">Preços</a>
+            <a href="#depoimentos" className="hover:text-primary transition-colors">Depoimentos</a>
+          </nav>
+
+          <div className="flex items-center gap-4">
+            <Link to="/login" className="text-sm font-semibold text-gray-700 hover:text-primary transition-colors">Entrar</Link>
             <Link to="/register">
-              <Button data-testid="landing-register-btn" className="text-sm bg-primary text-primary-foreground hover:bg-primary/90">
-                Comecar gratis
+              <Button className="bg-primary hover:bg-primary/90 text-white rounded-full px-6 py-5 h-auto text-sm font-bold shadow-lg shadow-primary/20 transition-all hover:scale-105 active:scale-95">
+                Criar meu link
               </Button>
             </Link>
           </div>
         </div>
-      </nav>
+      </header>
 
-      {/* Hero */}
-      <section className="pt-32 pb-20 md:pt-40 md:pb-32 px-4 md:px-8" data-testid="hero-section">
-        <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 md:gap-16 items-center">
-          <div className="animate-slide-up">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
-              <Zap className="h-3.5 w-3.5" />
-              Novo: Agendamento em tempo real
-            </div>
-            <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-tight">
-              Clicou,<br />
-              <span className="text-primary">agendou.</span>
-            </h1>
-            <p className="mt-6 text-base md:text-lg text-muted-foreground leading-relaxed max-w-lg">
-              Sua agenda inteligente para profissionais que valorizam cada minuto.
-              Seus clientes agendam online, voce gerencia tudo em um so lugar.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/register">
-                <Button
-                  size="lg"
-                  data-testid="hero-cta-btn"
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 text-base px-8"
-                >
-                  Comecar gratis
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
-            <div className="mt-8 flex items-center gap-6 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-primary" /> Gratis para comecar
-              </span>
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-primary" /> Sem cartao
-              </span>
-            </div>
-          </div>
+      {/* Hero Section */}
+      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden">
+        {/* Abstract shapes for background */}
+        <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-[800px] h-[800px] bg-primary/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 translate-y-1/2 -translate-x-1/4 w-[600px] h-[600px] bg-primary/10 rounded-full blur-3xl pointer-events-none" />
 
-          <div className="animate-slide-up relative" style={{ animationDelay: "0.15s" }}>
-            <div className="relative rounded-2xl overflow-hidden shadow-float border border-border">
-              <img
-                src="https://images.unsplash.com/photo-1559410117-4c12d656c06f?w=600&h=400&fit=crop"
-                alt="Profissional agendando"
-                className="w-full h-auto object-cover"
-              />
-              <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-md rounded-xl p-4 border border-border/50">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Clock className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold">Proximo: 14:30</p>
-                    <p className="text-xs text-muted-foreground">Maria - Corte + Escova</p>
-                  </div>
-                  <div className="ml-auto">
-                    <span className="status-badge status-confirmed">Confirmado</span>
-                  </div>
-                </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <div className="grid lg:grid-cols-2 gap-16 items-center">
+            <div className="flex flex-col items-center lg:items-start text-center lg:text-left">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 text-primary text-sm font-bold mb-8 border border-primary/10 tracking-wide uppercase">
+                <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                Lançamento Oficial Brasil
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="py-16 md:py-24 px-4 md:px-8 bg-card" data-testid="features-section">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12 md:mb-16">
-            <h2 className="font-heading text-3xl md:text-4xl font-semibold tracking-tight">
-              Tudo que voce precisa
-            </h2>
-            <p className="mt-3 text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
-              Ferramentas simples e poderosas para organizar sua rotina profissional.
-            </p>
-          </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {features.map((f, i) => (
-              <div
-                key={f.title}
-                className="stagger-item rounded-xl border border-border bg-background p-6 transition-all duration-200 hover:shadow-md hover:border-primary/20 hover:-translate-y-1"
-                data-testid={`feature-card-${i}`}
-              >
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <f.icon className="h-5 w-5 text-primary" />
-                </div>
-                <h3 className="font-heading font-semibold text-lg">{f.title}</h3>
-                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+              
+              <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold font-heading text-gray-900 leading-[1.1] tracking-tight">
+                Sua agenda no <br />
+                <span className="text-primary italic">automático</span>
+              </h1>
+              
+              <p className="mt-8 text-lg text-gray-600 max-w-xl leading-relaxed">
+                Crie seu link de agendamento profissional em minutos e esqueça o vai e vem de mensagens. Otimizado para o WhatsApp e o mercado brasileiro.
+              </p>
+              
+              <div className="mt-10 flex flex-col sm:flex-row items-center gap-4">
+                <Link to="/register">
+                  <Button className="bg-primary hover:bg-primary/90 text-white rounded-full px-10 py-6 h-auto text-lg font-bold shadow-xl shadow-primary/30 transition-all hover:scale-105 active:scale-95">
+                    Começar grátis agora
+                  </Button>
+                </Link>
+                <button className="flex items-center gap-2 text-gray-600 hover:text-primary font-bold px-6 py-4 transition-colors">
+                  <div className="w-10 h-10 rounded-full border-2 border-gray-200 flex items-center justify-center group-hover:border-primary transition-colors">
+                    <ArrowRight className="w-5 h-5 ml-0.5" />
+                  </div>
+                  Ver como funciona
+                </button>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* How it works */}
-      <section className="py-16 md:py-24 px-4 md:px-8" data-testid="how-it-works-section">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="font-heading text-3xl md:text-4xl font-semibold tracking-tight">
-              Simples assim
-            </h2>
-          </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            {steps.map((s) => (
-              <div key={s.num} className="text-center md:text-left stagger-item">
-                <span className="font-heading text-5xl font-bold text-primary/20">{s.num}</span>
-                <h3 className="font-heading text-xl font-semibold mt-2">{s.title}</h3>
-                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="planos" className="py-16 md:py-24 px-4 md:px-8 bg-card" data-testid="pricing-section">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12 md:mb-16">
-            <h2 className="font-heading text-3xl md:text-4xl font-semibold tracking-tight">
-              Planos e precos
-            </h2>
-            <p className="mt-3 text-base md:text-lg text-muted-foreground max-w-2xl mx-auto">
-              Escolha o plano ideal e evolua conforme seu negocio cresce.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-6">
-            {plans.map((plan) => (
-              <div
-                key={plan.name}
-                className={`rounded-2xl border p-6 bg-background transition-all ${
-                  plan.highlight ? "border-primary shadow-float" : "border-border hover:shadow-md"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">{plan.name}</p>
-                  {plan.highlight && (
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-primary font-semibold">
-                      Popular
-                    </span>
-                  )}
+              <div className="mt-12 flex items-center gap-4 py-2">
+                <div className="flex -space-x-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="w-10 h-10 rounded-full border-2 border-white bg-gray-100 overflow-hidden shadow-sm">
+                      <img src={`https://i.pravatar.cc/100?img=${i+10}`} alt="User" />
+                    </div>
+                  ))}
                 </div>
-                <p className="text-3xl font-bold mt-3">
-                  {plan.price}
-                  {plan.price !== "Gratis" && <span className="text-sm text-muted-foreground">/mes</span>}
+                <p className="text-sm text-gray-500 font-medium">
+                  Junte-se a <span className="text-gray-900 font-bold">+2.000</span> profissionais
                 </p>
-                <p className="text-sm text-muted-foreground mt-2">{plan.desc}</p>
-                <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-                  {plan.features.map((feat) => (
-                    <li key={feat} className="flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4 text-primary" />
+              </div>
+            </div>
+
+            <div className="relative group">
+              <div className="absolute inset-0 bg-primary/20 rounded-[2.5rem] blur-2xl group-hover:blur-3xl transition-all duration-500" />
+              <div className="relative bg-white rounded-[2rem] border border-gray-100 shadow-2xl overflow-hidden glow-mint transform lg:rotate-2 hover:rotate-0 transition-transform duration-700">
+                {/* Mockup Top Bar */}
+                <div className="h-8 bg-gray-50 border-b border-gray-100 flex items-center px-4 gap-1.5 leading-none">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
+                  <div className="ml-4 flex-1 h-4 bg-gray-200/50 rounded-full text-[8px] flex items-center px-2 text-gray-400">
+                    salaozap.com/seu-agendamento
+                  </div>
+                </div>
+                <div className="p-6 sm:p-8 space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-2 flex-1">
+                      <div className="h-2 w-32 bg-gray-100 rounded-full" />
+                      <div className="h-2 w-48 bg-gray-50 rounded-full" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-7 gap-2">
+                    {[16, 17, 18, 19, 20, 21, 22].map((d) => (
+                      <div key={d} className={`aspect-square rounded-xl flex flex-col items-center justify-center text-xs font-bold border transition-colors ${d === 18 ? 'bg-primary text-white border-primary border-4 shadow-lg shadow-primary/20' : 'bg-gray-50 border-gray-100 text-gray-400'}`}>
+                        {d}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-3">
+                    <div className="h-4 w-full bg-gray-50 rounded-lg" />
+                    <div className="h-4 w-5/6 bg-gray-50 rounded-lg" />
+                    <div className="h-4 w-4/6 bg-gray-50 rounded-lg" />
+                  </div>
+                  <div className="flex justify-end pt-4">
+                    <div className="h-10 w-32 bg-primary rounded-full shadow-lg shadow-primary/20" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* How it Works Section */}
+      <section id="como-funciona" className="py-24 bg-gray-50/50 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-20">
+            <span className="text-primary font-bold text-sm tracking-widest uppercase mb-4 block">Como funciona</span>
+            <h2 className="text-4xl sm:text-5xl font-bold font-heading text-gray-900 tracking-tight">
+              Professionalize seu atendimento em 3 passos
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-12 lg:gap-20">
+            {[
+              {
+                icon: Layout,
+                title: "1. Crie seu perfil",
+                desc: "Defina seus serviços, duração e horários disponíveis de forma personalizada."
+              },
+              {
+                icon: Smartphone,
+                title: "2. Compartilhe o link",
+                desc: "Coloque seu link exclusivo na bio do Instagram ou envie diretamente pelo WhatsApp."
+              },
+              {
+                icon: ShieldCheck,
+                title: "3. Receba agendamentos",
+                desc: "Seus clientes agendam sozinhos e você recebe notificações instantâneas."
+              }
+            ].map((step, idx) => (
+              <div key={idx} className="flex flex-col items-center text-center group">
+                <div className="w-20 h-20 bg-white rounded-3xl shadow-xl shadow-gray-200/50 flex items-center justify-center mb-8 border border-gray-100 transform transition-all group-hover:-translate-y-2 group-hover:bg-primary/5">
+                  <step.icon className="w-10 h-10 text-primary transition-colors" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4 font-heading">{step.title}</h3>
+                <p className="text-gray-500 leading-relaxed text-lg px-4">{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Grid Section */}
+      <section id="funcionalidades" className="py-24 lg:py-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid lg:grid-cols-2 gap-20 items-center">
+            <div className="grid grid-cols-2 gap-4 lg:gap-6 order-2 lg:order-1">
+              {[
+                { icon: MessageSquare, title: "Integração Whats", desc: "Notificações automáticas direto no celular do seu cliente." },
+                { icon: Calendar, title: "Sincronização", desc: "Conecte com Google Calendar e Apple Calendar." },
+                { icon: Smartphone, title: "Pagamento Pix", desc: "Receba o valor da consultoria antes mesmo do atendimento." },
+                { icon: MousePointer2, title: "Relatórios", desc: "Analise seu crescimento mensal com dados reais." }
+              ].map((feat, idx) => (
+                <div key={idx} className={`p-6 rounded-3xl border border-gray-100 shadow-sm transition-all hover:shadow-xl hover:border-transparent ${idx % 2 === 1 ? 'lg:translate-y-8' : ''} bg-white`}>
+                  <div className="w-12 h-12 bg-primary/5 rounded-2xl flex items-center justify-center mb-6 text-primary border border-primary/10">
+                    <feat.icon className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-lg font-bold text-gray-900 mb-2 font-heading">{feat.title}</h4>
+                  <p className="text-sm text-gray-500 leading-relaxed">{feat.desc}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="order-1 lg:order-2">
+              <h2 className="text-4xl sm:text-5xl font-bold font-heading text-gray-900 leading-tight mb-8">
+                Tudo que você precisa para <span className="text-primary">crescer</span> seu negócio
+              </h2>
+              <p className="text-lg text-gray-600 mb-10 leading-relaxed">
+                Focamos na simplicidade para você e para seu cliente. Menos tempo respondendo mensagens, mais tempo faturando.
+              </p>
+              <ul className="space-y-5">
+                {[
+                  "Sem aplicativos para instalar",
+                  "Suporte humanizado em português",
+                  "Cancelamentos automáticos com regras"
+                ].map((item, idx) => (
+                  <li key={idx} className="flex items-center gap-3 text-lg font-bold text-gray-700">
+                    <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white">
+                      <Check className="w-4 h-4 stroke-[3px]" />
+                    </div>
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section id="depoimentos" className="py-24 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl font-bold font-heading text-gray-900">Quem usa, recomenda</h2>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                text: "\"O SalãoZap mudou minha rotina. Meus pacientes adoram a facilidade de marcar pelo WhatsApp sem eu precisar parar meus atendimentos.\"",
+                author: "Mariana Silva",
+                role: "Dentista",
+                img: "https://i.pravatar.cc/100?img=32"
+              },
+              {
+                text: "\"Interface limpa e muito intuitiva. O suporte em português é um grande diferencial para nós aqui no Brasil. Meus clientes elogiam!\"",
+                author: "Dr. Ricardo Santos",
+                role: "Fisioterapeuta",
+                img: "https://i.pravatar.cc/100?img=12"
+              },
+              {
+                text: "\"Melhor custo-benefício que encontrei. O design passa muita credibilidade para meus clientes de consultoria.\"",
+                author: "Ana Oliveira",
+                role: "Consultora",
+                img: "https://i.pravatar.cc/100?img=47"
+              }
+            ].map((testimonial, idx) => (
+              <div key={idx} className="bg-white p-8 rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 flex flex-col items-start gap-6">
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <Star key={s} className="w-5 h-5 text-primary fill-primary" />
+                  ))}
+                </div>
+                <p className="text-gray-600 leading-relaxed text-lg flex-1 italic">{testimonial.text}</p>
+                <div className="flex items-center gap-4 pt-6 border-t border-gray-100 w-full">
+                  <img src={testimonial.img} alt={testimonial.author} className="w-12 h-12 rounded-full border-2 border-primary/20" />
+                  <div>
+                    <h5 className="font-bold text-gray-900">{testimonial.author}</h5>
+                    <p className="text-gray-400 text-sm">{testimonial.role}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Table */}
+      <section id="precos" className="py-24 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-20">
+            <h2 className="text-4xl font-bold font-heading text-gray-900 tracking-tight">Planos simples para o seu crescimento</h2>
+            <p className="mt-4 text-lg text-gray-600">Comece grátis e evolua conforme seu negócio escala.</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8 items-end">
+            {[
+              {
+                name: "Start",
+                price: "Grátis",
+                desc: "Para quem está começando agora.",
+                features: ["Página pública personalizada", "Agendamentos ilimitados", "WhatsApp básico"]
+              },
+              {
+                name: "Pro",
+                price: "R$ 49",
+                period: "/mês",
+                desc: "Para profissionais estabelecidos.",
+                features: ["Tudo do Start", "Lembretes Automáticos", "Relatórios Financeiros", "Suporte Prioritário"],
+                popular: true
+              },
+              {
+                name: "Studio",
+                price: "R$ 99",
+                period: "/mês",
+                desc: "Para equipes e clínicas.",
+                features: ["Tudo do Pro", "Múltiplos Profissionais", "Gestão de Comissões", "API de Integração"]
+              }
+            ].map((plan, idx) => (
+              <div key={idx} className={`relative p-8 rounded-[2.5rem] border transition-all duration-300 hover:-translate-y-2 ${plan.popular ? 'bg-gray-900 border-gray-900 text-white shadow-2xl scale-105' : 'bg-white border-gray-100 text-gray-900 shadow-sm hover:shadow-xl'}`}>
+                {plan.popular && (
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-white text-[10px] font-black tracking-[0.2em] uppercase px-4 py-1.5 rounded-full shadow-lg">
+                    MAIS POPULAR
+                  </div>
+                )}
+                <div className="mb-8 text-center">
+                  <h4 className="text-xl font-bold mb-2 font-heading">{plan.name}</h4>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-5xl font-black">{plan.price}</span>
+                    {plan.period && <span className={`text-sm font-medium ${plan.popular ? 'text-gray-400' : 'text-gray-400'}`}>{plan.period}</span>}
+                  </div>
+                  <p className={`mt-4 text-sm font-medium ${plan.popular ? 'text-gray-400' : 'text-gray-500'}`}>{plan.desc}</p>
+                </div>
+                <ul className="space-y-4 mb-10">
+                  {plan.features.map((feat, fIdx) => (
+                    <li key={fIdx} className="flex items-center gap-3 text-sm font-semibold">
+                      <Check className={`w-5 h-5 ${plan.popular ? 'text-primary' : 'text-primary'}`} />
                       {feat}
                     </li>
                   ))}
                 </ul>
                 <Link to="/register">
-                  <Button
-                    size="sm"
-                    className={`w-full mt-6 ${plan.highlight ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
-                    variant={plan.highlight ? "default" : "outline"}
-                  >
-                    Comecar agora
+                  <Button className={`w-full rounded-2xl py-6 h-auto text-lg font-bold shadow-lg transition-all active:scale-95 ${plan.popular ? 'bg-primary hover:bg-primary/90 text-white shadow-primary/20' : 'bg-gray-50 hover:bg-gray-100 text-gray-900 shadow-gray-200/50'}`}>
+                    Começar agora
                   </Button>
                 </Link>
               </div>
@@ -267,38 +352,83 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-16 md:py-24 px-4 md:px-8" data-testid="cta-section">
-        <div className="max-w-3xl mx-auto text-center bg-gradient-to-br from-teal-50 to-stone-100 rounded-2xl p-8 md:p-12 border border-border">
-          <h2 className="font-heading text-3xl md:text-4xl font-bold tracking-tight">
-            Pronto para organizar sua agenda?
-          </h2>
-          <p className="mt-4 text-muted-foreground text-base md:text-lg">
-            Comece gratis hoje. Sem complicacao, sem cartao de credito.
-          </p>
-          <Link to="/register">
-            <Button
-              size="lg"
-              data-testid="cta-register-btn"
-              className="mt-8 bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-md transition-all duration-200 active:scale-95 text-base px-8"
-            >
-              Criar minha conta gratis
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
+      <section className="py-20 px-4">
+        <div className="max-w-6xl mx-auto relative overflow-hidden bg-primary rounded-[3rem] shadow-2xl shadow-primary/40 px-10 py-16 sm:px-20 sm:py-24 group">
+          <div className="absolute inset-0 bg-dot-pattern opacity-10" />
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          
+          <div className="relative text-center flex flex-col items-center">
+            <h2 className="text-4xl sm:text-5xl font-bold font-heading text-white max-w-2xl leading-tight">
+              Pronto para colocar sua agenda no automático?
+            </h2>
+            <p className="mt-6 text-white/80 text-xl max-w-xl">
+              Comece hoje mesmo a transformar seu atendimento. 14 dias grátis, sem cartão de crédito.
+            </p>
+            <div className="mt-10 flex flex-col sm:flex-row items-center gap-6">
+              <Link to="/register">
+                <Button className="bg-white hover:bg-gray-100 text-primary rounded-full px-12 py-6 h-auto text-xl font-bold shadow-xl transition-all hover:scale-105 active:scale-95">
+                  Criar meu link agora
+                </Button>
+              </Link>
+              <span className="text-white/60 font-medium text-sm">Teste gratuito de 14 dias</span>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border py-8 px-4 md:px-8" data-testid="footer">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-5 w-5 text-primary" />
-            <span className="font-heading font-bold">SalãoZap</span>
+      <footer className="pt-20 pb-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-4 gap-12 pb-16">
+            <div className="col-span-1 md:col-span-1">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white">
+                  <CalendarDays className="w-5 h-5" />
+                </div>
+                <span className="text-2xl font-bold text-gray-900 font-heading">SalãoZap</span>
+              </div>
+              <p className="text-gray-500 text-sm leading-relaxed max-w-[240px]">
+                Simplificando o agendamento de serviços para o mercado brasileiro desde 2023.
+              </p>
+            </div>
+            
+            {[
+              {
+                title: "PRODUTO",
+                links: ["Recursos", "Integrações", "Preços", "Update Log"]
+              },
+              {
+                title: "EMPRESA",
+                links: ["Sobre nós", "Carreiras", "Blog", "Contato"]
+              },
+              {
+                title: "LEGAL",
+                links: ["Privacidade", "Termos", "Segurança"]
+              }
+            ].map((col, idx) => (
+              <div key={idx}>
+                <h6 className="text-[10px] sm:text-xs font-black text-gray-900 tracking-widest uppercase mb-6">{col.title}</h6>
+                <ul className="space-y-4">
+                  {col.links.map((link, lIdx) => (
+                    <li key={lIdx}>
+                      <a href="#" className="text-gray-500 hover:text-primary transition-colors text-sm font-medium">{link}</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
           </div>
-          <p className="text-sm text-muted-foreground">
-            Seu slot, sua agenda. Todos os direitos reservados.
-          </p>
+
+          <div className="pt-8 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-6">
+            <p className="text-gray-400 text-[10px] sm:text-xs font-medium">
+              © 2024 SalãoZap. Todos os direitos reservados.
+            </p>
+            <div className="flex items-center gap-8 text-[10px] sm:text-xs font-bold text-gray-500 tracking-widest">
+              <a href="#" className="hover:text-primary transition-colors">TWITTER</a>
+              <a href="#" className="hover:text-primary transition-colors">INSTAGRAM</a>
+              <a href="#" className="hover:text-primary transition-colors">LINKEDIN</a>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

@@ -12,20 +12,20 @@
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 175 77% 26%;
+    --primary: 167 85% 45%;
     --primary-foreground: 0 0% 100%;
     --secondary: 350 90% 60%;
     --secondary-foreground: 0 0% 100%;
     --muted: 40 7% 96%;
     --muted-foreground: 215 16% 47%;
-    --accent: 40 7% 96%;
-    --accent-foreground: 222 47% 11%;
+    --accent: 167 85% 95%;
+    --accent-foreground: 167 85% 20%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 20 6% 90%;
-    --input: 20 6% 90%;
-    --ring: 175 77% 26%;
-    --radius: 0.75rem;
+    --border: 20 6% 92%;
+    --input: 20 6% 92%;
+    --ring: 167 85% 45%;
+    --radius: 1rem;
     --chart-1: 175 77% 26%;
     --chart-2: 350 90% 60%;
     --chart-3: 43 74% 66%;
@@ -109,6 +109,13 @@
   }
   .animate-scale-in {
     animation: scaleIn 0.2s ease-out forwards;
+  }
+  .glow-mint {
+    box-shadow: 0 0 50px -10px hsla(167, 85%, 45%, 0.3);
+  }
+  .bg-dot-pattern {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
   }
 }
 
