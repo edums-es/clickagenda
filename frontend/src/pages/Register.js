@@ -5,13 +5,22 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CalendarDays, MessageSquare, User, Mail, Lock, Phone, Globe } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { CalendarDays, MessageSquare, User, Mail, Lock, Phone, Briefcase, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Register() {
   const { register, updateUser } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", custom_link: "", role: "professional" });
+  const [form, setForm] = useState({ 
+    name: "", 
+    email: "", 
+    password: "", 
+    phone: "", 
+    custom_link: "", 
+    business_name: "", 
+    role: "professional" 
+  });
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
@@ -41,13 +50,25 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      // Logic for Register and Profile update
       const data = await register(form);
       
-      // Update profile with phone and custom link if they exist
-      const profilePayload = {};
-      if (form.phone) profilePayload.phone = form.phone;
-      if (form.custom_link) profilePayload.slug = form.custom_link; // Assuming slug is the field for custom link
+      // Original logic for pending client registration
+      const raw = localStorage.getItem("pending_client_register");
+      let profilePayload = {};
+      
+      if (raw) {
+        try {
+          const pending = JSON.parse(raw);
+          if (pending.phone) profilePayload.phone = pending.phone;
+          if (pending.name && !data?.user?.name) profilePayload.name = pending.name;
+        } catch (e) {
+          console.error("Error parsing pending register", e);
+        }
+      }
+
+      // Add new fields to payload if they are filled and not already in pending
+      if (form.phone && !profilePayload.phone) profilePayload.phone = form.phone;
+      if (form.custom_link) profilePayload.slug = form.custom_link;
       
       if (Object.keys(profilePayload).length > 0) {
         try {
@@ -79,9 +100,13 @@ export default function Register() {
       <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
       <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-primary/10 rounded-full blur-[100px] translate-x-1/3 translate-y-1/3 pointer-events-none" />
 
-      <div className="w-full max-w-[520px] relative z-10 py-12">
+      <div className="w-full max-w-[520px] relative z-10 py-12 animate-slide-up">
         {/* Header */}
         <div className="text-center mb-10 flex flex-col items-center">
+          <Link to="/" className="inline-flex items-center gap-2 text-gray-400 hover:text-gray-600 transition-colors text-xs font-bold mb-6 tracking-widest uppercase bg-white/50 backdrop-blur-sm px-4 py-2 rounded-full border border-gray-100 shadow-sm">
+            <ArrowLeft className="h-3 w-3" />
+            Voltar ao Início
+          </Link>
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center text-white shadow-2xl shadow-primary/20 mb-6 transform transition-transform hover:scale-110">
             <CalendarDays className="w-10 h-10 stroke-[1.5px]" />
           </div>
@@ -99,6 +124,31 @@ export default function Register() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Account Type Selection - RESTORED */}
+            <div className="space-y-3 pt-2">
+              <Label className="text-sm font-bold text-gray-700 ml-1">Tipo de conta</Label>
+              <RadioGroup
+                value={form.role}
+                onValueChange={(value) => setForm((p) => ({ ...p, role: value }))}
+                className="grid grid-cols-2 gap-3"
+              >
+                <label className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition-all ${form.role === 'professional' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-100 bg-gray-50/50 hover:bg-gray-50'}`}>
+                  <RadioGroupItem value="professional" id="role-professional" className="sr-only" />
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${form.role === 'professional' ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
+                    {form.role === 'professional' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <span className={`text-sm font-bold ${form.role === 'professional' ? 'text-gray-900' : 'text-gray-500'}`}>Profissional</span>
+                </label>
+                <label className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition-all ${form.role === 'client' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-100 bg-gray-50/50 hover:bg-gray-50'}`}>
+                  <RadioGroupItem value="client" id="role-client" className="sr-only" />
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${form.role === 'client' ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
+                    {form.role === 'client' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <span className={`text-sm font-bold ${form.role === 'client' ? 'text-gray-900' : 'text-gray-500'}`}>Cliente</span>
+                </label>
+              </RadioGroup>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="name" className="text-sm font-bold text-gray-700 ml-1">Nome completo</Label>
               <div className="relative">
@@ -110,10 +160,30 @@ export default function Register() {
                   value={form.name}
                   onChange={handleChange}
                   required
+                  data-testid="register-name-input"
                   className="h-14 rounded-2xl border-gray-100 bg-gray-50/50 pl-14 pr-6 text-gray-900 focus:bg-white focus:ring-primary/20 transition-all text-base"
                 />
               </div>
             </div>
+
+            {/* Business Name - RESTORED */}
+            {form.role === "professional" && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                <Label htmlFor="business_name" className="text-sm font-bold text-gray-700 ml-1">Nome do negócio (opcional)</Label>
+                <div className="relative">
+                  <Briefcase className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+                  <Input
+                    id="business_name"
+                    name="business_name"
+                    placeholder="Ex: Meu Salão"
+                    value={form.business_name}
+                    onChange={handleChange}
+                    data-testid="register-business-input"
+                    className="h-14 rounded-2xl border-gray-100 bg-gray-50/50 pl-14 pr-6 text-gray-900 focus:bg-white focus:ring-primary/20 transition-all text-base"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-bold text-gray-700 ml-1">Email</Label>
@@ -127,6 +197,7 @@ export default function Register() {
                   value={form.email}
                   onChange={handleChange}
                   required
+                  data-testid="register-email-input"
                   className="h-14 rounded-2xl border-gray-100 bg-gray-50/50 pl-14 pr-6 text-gray-900 focus:bg-white focus:ring-primary/20 transition-all text-base"
                 />
               </div>
@@ -178,6 +249,7 @@ export default function Register() {
                   value={form.password}
                   onChange={handleChange}
                   required
+                  data-testid="register-password-input"
                   className="h-14 rounded-2xl border-gray-100 bg-gray-50/50 pl-14 pr-6 text-gray-900 focus:bg-white focus:ring-primary/20 transition-all text-base"
                 />
               </div>
@@ -186,6 +258,7 @@ export default function Register() {
             <Button
               type="submit"
               disabled={loading}
+              data-testid="register-submit-btn"
               className="w-full h-14 bg-primary hover:bg-primary/90 text-white rounded-2xl text-lg font-bold shadow-xl shadow-primary/20 transition-all active:scale-95 mt-4"
             >
               {loading ? "Criando conta..." : "Criar minha conta"}
@@ -206,6 +279,7 @@ export default function Register() {
               variant="outline"
               className="h-14 rounded-2xl border-gray-100 bg-white hover:bg-gray-50 font-bold flex gap-3 shadow-sm hover:shadow-md transition-all active:scale-95 text-gray-700"
               onClick={handleGoogleLogin}
+              data-testid="google-register-btn"
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
@@ -228,7 +302,7 @@ export default function Register() {
         <div className="mt-10 text-center">
           <p className="text-sm font-bold text-gray-500">
             Já tem uma conta?{" "}
-            <Link to="/login" className="text-primary hover:text-primary/80 transition-colors underline underline-offset-4 decoration-primary/20">
+            <Link to="/login" className="text-primary hover:text-primary/80 transition-colors underline underline-offset-4 decoration-primary/20" data-testid="go-to-login-link">
               Entre aqui
             </Link>
           </p>
