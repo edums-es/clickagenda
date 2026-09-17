@@ -78,6 +78,10 @@ if (config.enableVisualEdits && babelMetadataPlugin) {
 }
 
 webpackConfig.devServer = (devServerConfig) => {
+  // Links públicos como /p/meu-negocio precisam voltar ao React Router
+  // também quando são abertos diretamente ou compartilhados.
+  devServerConfig.historyApiFallback = true;
+
   // Apply visual edits dev server setup only if enabled
   if (config.enableVisualEdits && setupDevServer) {
     devServerConfig = setupDevServer(devServerConfig);

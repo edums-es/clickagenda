@@ -1,0 +1,30 @@
+import { useEffect, useState } from "react";
+import api from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { BadgeCheck, CircleAlert, Copy, CreditCard, KeyRound, Landmark, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
+const iconByProvider = { stripe: CreditCard, woovi: Landmark, stone: KeyRound };
+const nameByProvider = { stripe: "Stripe", woovi: "Woovi / OpenPix", stone: "Stone" };
+const fields = {
+  stripe: [{ key: "secret_key", label: "Secret key", placeholder: "sk_live_..." }, { key: "price_id", label: "Preço mensal Pro", placeholder: "price_..." }, { key: "webhook_secret", label: "Webhook signing secret", placeholder: "whsec_..." }],
+  woovi: [{ key: "app_id", label: "App ID", placeholder: "Seu App ID Woovi" }, { key: "webhook_authorization", label: "Autorização do webhook", placeholder: "Crie um segredo forte" }, { key: "webhook_hmac_secret", label: "HMAC do webhook (opcional)", placeholder: "Opcional" }],
+  stone: [{ key: "merchant_id", label: "Merchant ID", placeholder: "Identificador da conta Stone" }, { key: "bearer_token", label: "Token de integração", placeholder: "Token fornecido pela Stone" }],
+};
+
+export default function AdminIntegrations() {
+  const [integrations, setIntegrations] = useState(null);
+  const [provider, setProvider] = useState(null);
+  const [values, setValues] = useState({});
+  const [saving, setSaving] = useState(false);
+  const load = () => api.get("/admin/integrations").then((res) => setIntegrations(res.data)).catch(() => toast.error("Não foi possível consultar as integrações."));
+  useEffect(() => { load(); }, []);
+  const open = (name) => { setProvider(name); setValues({}); };
+  const save = async () => { setSaving(true); try { await api.post("/admin/integrations", { provider, values: Object.fromEntries(Object.entries(values).filter(([, value]) => value)) }); toast.success("Credenciais criptografadas e salvas."); setProvider(null); load(); } catch (error) { toast.error(error.response?.data?.detail || "Não foi possível salvar as credenciais."); } finally { setSaving(false); } };
+  const remove = async (name) => { if (!window.confirm(`Remover as credenciais da ${nameByProvider[name]}?`)) return; try { await api.delete(`/admin/integrations/${name}`); toast.success("Credenciais removidas."); load(); } catch { toast.error("Não foi possível remover as credenciais."); } };
+  if (!integrations) return <div className="p-8 text-sm text-muted-foreground">Carregando integrações...</div>;
+  return <div className="max-w-5xl mx-auto space-y-7"><div><p className="text-xs font-black uppercase tracking-widest text-primary">Cobrança e APIs</p><h1 className="text-3xl font-black font-heading">Integrações de pagamento</h1><p className="mt-2 text-muted-foreground">Cadastre as chaves aqui. Elas são criptografadas antes de serem gravadas e nunca voltam inteiras ao navegador.</p></div><div className="grid gap-5">{Object.entries(integrations).map(([name, item]) => { const Icon = iconByProvider[name]; return <section key={name} className="rounded-3xl border bg-white p-6"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-5"><div className="flex gap-4"><div className="h-11 w-11 rounded-2xl bg-primary/10 grid place-items-center text-primary"><Icon className="h-5 w-5" /></div><div><h2 className="font-black text-lg">{nameByProvider[name]}</h2><p className="text-sm text-muted-foreground mt-1 max-w-xl">{item.description}</p></div></div><span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-black ${item.configured ? "bg-primary/10 text-primary" : "bg-amber-50 text-amber-700"}`}>{item.configured ? <BadgeCheck className="h-4 w-4" /> : <CircleAlert className="h-4 w-4" />}{item.configured ? "Configurada" : "Pendente"}</span></div>{Object.values(item.saved || {}).filter(Boolean).length > 0 && <div className="mt-4 flex flex-wrap gap-2">{Object.entries(item.saved).filter(([, value]) => value).map(([key, value]) => <span key={key} className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-600">{key}: {value}</span>)}</div>}{item.webhook_url && <div className="mt-5 rounded-xl bg-slate-50 p-3 flex flex-wrap items-center justify-between gap-3"><code className="text-xs break-all text-slate-600">{item.webhook_url}</code><Button size="sm" variant="outline" onClick={() => { navigator.clipboard.writeText(item.webhook_url); toast.success("Webhook copiado."); }}><Copy className="mr-2 h-3.5 w-3.5" />Copiar</Button></div>}<div className="mt-5 flex gap-3"><Button onClick={() => open(name)}>{item.configured ? "Atualizar chaves" : "Configurar"}</Button>{Object.values(item.saved || {}).some(Boolean) && <Button variant="outline" className="text-red-600" onClick={() => remove(name)}><Trash2 className="mr-2 h-4 w-4" />Remover</Button>}</div></section>; })}</div><p className="text-xs text-muted-foreground">A Stone permanece bloqueada para cobrança até concluir credenciamento, tokenização e antifraude. Salvar o token não habilita cartão automaticamente.</p><Dialog open={!!provider} onOpenChange={(open) => !open && setProvider(null)}><DialogContent className="max-w-lg rounded-3xl"><DialogHeader><DialogTitle>Configurar {provider && nameByProvider[provider]}</DialogTitle><p className="text-sm text-muted-foreground">Os campos são criptografados no servidor. Deixe o HMAC vazio se a Woovi não o utilizar.</p></DialogHeader><div className="space-y-4 py-2">{provider && fields[provider].map((field) => <div key={field.key} className="space-y-2"><Label>{field.label}</Label><Input type="password" autoComplete="new-password" placeholder={field.placeholder} value={values[field.key] || ""} onChange={(event) => setValues((previous) => ({ ...previous, [field.key]: event.target.value }))}/></div>)}</div><Button onClick={save} disabled={saving}>{saving ? "Criptografando..." : "Salvar com segurança"}</Button></DialogContent></Dialog></div>;
+}

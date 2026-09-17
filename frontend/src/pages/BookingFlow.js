@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useSearchParams, Link, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
-import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +14,6 @@ import {
   User,
   Phone,
   Mail,
-  MessageCircle,
   CalendarDays,
   Briefcase,
   Home,
@@ -35,7 +33,6 @@ export default function BookingFlow() {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, updateUser } = useAuth();
   const preSelectedService = searchParams.get("service");
 
   const [profileData, setProfileData] = useState(null);
@@ -53,8 +50,6 @@ export default function BookingFlow() {
   
   const [booking, setBooking] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
-  const [whatsappLink, setWhatsappLink] = useState(null);
-  const isClientUser = user?.role === "client";
 
   const datesContainerRef = useRef(null);
 
@@ -84,16 +79,6 @@ export default function BookingFlow() {
   }, [slug, preSelectedService]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
-
-  useEffect(() => {
-    if (!isClientUser) return;
-    setClientInfo((prev) => ({
-      ...prev,
-      name: user?.name || prev.name,
-      phone: user?.phone || prev.phone,
-      email: user?.email || prev.email,
-    }));
-  }, [isClientUser, user]);
 
   const loadSlots = async (date) => {
     if (!selectedService) return;
@@ -150,24 +135,7 @@ export default function BookingFlow() {
         start_time: selectedSlot.start_time,
         notes: clientInfo.notes,
       });
-      if (isClientUser) {
-        const profilePayload = {};
-        if (!user?.phone && clientInfo.phone) profilePayload.phone = clientInfo.phone;
-        if (!user?.email && clientInfo.email) profilePayload.email = clientInfo.email;
-        if (!user?.name && clientInfo.name) profilePayload.name = clientInfo.name;
-        if (Object.keys(profilePayload).length > 0) {
-          const profileRes = await api.put("/profile", profilePayload);
-          updateUser(profileRes.data);
-        }
-      }
-      if (!user) {
-        localStorage.setItem(
-          "pending_client_register",
-          JSON.stringify({ name: clientInfo.name, phone: clientInfo.phone, email: clientInfo.email })
-        );
-      }
       setConfirmation(res.data);
-      setWhatsappLink(res.data.whatsapp_link || null);
       setIsDataModalOpen(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
       toast.success("Agendamento realizado!");
@@ -278,19 +246,10 @@ export default function BookingFlow() {
           </div>
 
           <div className="space-y-3">
-            {whatsappLink ? (
-              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="block w-full">
-                <Button className="w-full h-14 bg-[#00D49D] hover:bg-[#00B98A] text-white text-[15px] font-bold rounded-xl shadow-lg shadow-[#00D49D]/25 transition-all active:scale-[0.98]">
-                  <MessageCircle className="h-5 w-5 mr-2" fill="currentColor" />
-                  Confirmar no WhatsApp
-                </Button>
-              </a>
-            ) : (
-                <Button className="w-full h-14 bg-[#00D49D] hover:bg-[#00B98A] text-white text-[15px] font-bold rounded-xl shadow-lg shadow-[#00D49D]/25 transition-all active:scale-[0.98]" onClick={() => window.location.reload()}>
-                  <CheckCircle2 className="h-5 w-5 mr-2" />
-                  Concluido
-                </Button>
-            )}
+            <Button className="w-full h-14 bg-[#00D49D] hover:bg-[#00B98A] text-white text-[15px] font-bold rounded-xl shadow-lg shadow-[#00D49D]/25 transition-all active:scale-[0.98]" onClick={() => window.location.reload()}>
+              <CheckCircle2 className="h-5 w-5 mr-2" />
+              Concluido
+            </Button>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               <Button variant="outline" className="h-14 w-full rounded-xl font-bold text-[#475569] bg-[#F1F5F9] border-transparent hover:bg-[#E2E8F0] active:scale-[0.98] transition-all">
@@ -356,11 +315,6 @@ export default function BookingFlow() {
               {professional.social_links.instagram && (
                 <a href={`https://instagram.com/${professional.social_links.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
                   <Instagram className="h-[18px] w-[18px]" />
-                </a>
-              )}
-              {professional.social_links.whatsapp && (
-                <a href={`https://wa.me/${professional.social_links.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
-                  <MessageCircle className="h-[18px] w-[18px]" />
                 </a>
               )}
               {professional.social_links.facebook && (
@@ -587,12 +541,11 @@ export default function BookingFlow() {
                   onChange={(e) => setClientInfo((p) => ({ ...p, name: e.target.value }))}
                   placeholder="Ex: Joao da Silva"
                   className="pl-10 h-12 rounded-xl bg-neutral-50/80 border-border/60 hover:border-border focus:border-[#00D49D] font-medium"
-                  disabled={isClientUser && !!user?.name}
                 />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-foreground font-bold text-xs tracking-wide">WhatsApp *</Label>
+              <Label className="text-foreground font-bold text-xs tracking-wide">Telefone *</Label>
               <div className="relative">
                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                 <Input
@@ -600,7 +553,6 @@ export default function BookingFlow() {
                   onChange={(e) => setClientInfo((p) => ({ ...p, phone: e.target.value }))}
                   placeholder="(11) 99999-9999"
                   className="pl-10 h-12 rounded-xl bg-neutral-50/80 border-border/60 hover:border-border focus:border-[#00D49D] font-medium"
-                  disabled={isClientUser && !!user?.phone}
                 />
               </div>
             </div>
@@ -613,7 +565,6 @@ export default function BookingFlow() {
                   onChange={(e) => setClientInfo((p) => ({ ...p, email: e.target.value }))}
                   placeholder="seu@email.com"
                   className="pl-10 h-12 rounded-xl bg-neutral-50/80 border-border/60 hover:border-border focus:border-[#00D49D] font-medium"
-                  disabled={isClientUser && !!user?.email}
                 />
               </div>
             </div>

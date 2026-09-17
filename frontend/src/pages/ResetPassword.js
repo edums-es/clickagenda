@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,8 @@ import { toast } from "sonner";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get("token") || "";
+  const recoveryParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const accessToken = recoveryParams.get("access_token") || "";
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -24,18 +24,20 @@ export default function ResetPassword() {
       toast.error("As senhas não coincidem.");
       return;
     }
-    if (newPassword.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres.");
+    if (newPassword.length < 10 || !/[a-zA-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      toast.error("Use ao menos 10 caracteres, com letras e números.");
       return;
     }
     setLoading(true);
     try {
-      await api.post("/auth/reset-password", { token, new_password: newPassword });
+      await api.post("/auth/reset-password", { new_password: newPassword }, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+      });
       toast.success("Senha redefinida com sucesso! Faça login com a nova senha.");
       navigate("/login");
     } catch (err) {
       const status = err.response?.status;
-      if (status === 400) {
+      if (status === 400 || status === 401) {
         setTokenError(true);
       } else {
         toast.error("Erro ao redefinir senha. Tente novamente.");
@@ -91,7 +93,7 @@ export default function ResetPassword() {
                     Solicitar novo link
                   </Link>
                 </div>
-              ) : !token ? (
+              ) : !accessToken ? (
                 <div className="text-center space-y-4 py-4">
                   <AlertCircle className="h-16 w-16 text-destructive mx-auto" />
                   <p className="text-muted-foreground text-sm">
@@ -110,7 +112,7 @@ export default function ResetPassword() {
                       <Input
                         id="new-password"
                         type="password"
-                        placeholder="Mínimo 6 caracteres"
+                        placeholder="10+ caracteres, letras e números"
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         required

@@ -16,7 +16,6 @@ import {
   Search,
   Share2,
   Plus,
-  MessageCircle,
   Link as LinkIcon,
   Copy
 } from "lucide-react";
@@ -442,13 +441,6 @@ export default function Dashboard() {
                              <p className="text-[12px] text-[#64748B] font-semibold mt-0.5">{apt.date} as {apt.start_time} • {apt.service_name}</p>
                            </div>
                         </div>
-                        {apt.client_phone && (
-                          <a href={`https://wa.me/55${apt.client_phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer">
-                            <Button size="icon" variant="ghost" className="h-9 w-9 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-100/80 hover:text-emerald-700 transition-colors shrink-0">
-                              <MessageCircle className="h-[18px] w-[18px]" />
-                            </Button>
-                          </a>
-                        )}
                       </div>
                     )
                   })

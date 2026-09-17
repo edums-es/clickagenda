@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useSearchParams, Link, useNavigate } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
-import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,36 +9,56 @@ import {
   Clock,
   ArrowRight,
   CheckCircle2,
-  Star,
-  CheckCircle,
   User,
   Phone,
   Mail,
-  MessageCircle,
   CalendarDays,
   Briefcase,
   Home,
   MapPin,
+  Share2,
+  ChevronRight,
   Instagram,
   Facebook,
   Youtube,
   Globe,
-  Video
+  Video,
+  BadgeCheck,
+  MessageCircle
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
+const PUBLIC_PROFILE_PREVIEW = {
+  professional: {
+    name: "Marina Costa",
+    business_name: "Studio Aurora",
+    business_type: "Beleza & Autocuidado",
+    city: "São Paulo",
+    state: "SP",
+    phone: "11987654321",
+    bio: "Um espaço pensado para você se sentir ainda mais confiante. Atendimento com escuta, cuidado e horários reservados só para você.",
+    picture: "http://127.0.0.1:8000/uploads/user_67de0e752333_picture_9c7c63b14f.jpg",
+    cover_picture: "http://127.0.0.1:8000/uploads/user_67de0e752333_cover_picture_bc0beb2f20.jpg",
+    social_links: { instagram: "studioaurora", website: "studioaurora.com" },
+  },
+  services: [
+    { service_id: "preview-design", name: "Design personalizado", description: "Cuidado feito para você", duration_minutes: 60, price: 95, active: true },
+    { service_id: "preview-experience", name: "Experiência Aurora", description: "Relaxamento e finalização", duration_minutes: 90, price: 145, active: true },
+    { service_id: "preview-return", name: "Manutenção", description: "Para manter seu resultado", duration_minutes: 45, price: 70, active: true },
+  ],
+  featured_services: [{ service_id: "preview-design" }],
+};
+
 export default function PublicProfile() {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const { user, updateUser } = useAuth();
   const preSelectedService = searchParams.get("service");
+  const previewMode = process.env.NODE_ENV === "development" && searchParams.get("preview") === "1";
 
   const [profileData, setProfileData] = useState(null);
-  const [reviews, setReviews] = useState(null);
   const [loading, setLoading] = useState(true);
   
   const [selectedService, setSelectedService] = useState(null);
@@ -49,26 +68,51 @@ export default function PublicProfile() {
   const [selectedSlot, setSelectedSlot] = useState(null);
   
   const [clientInfo, setClientInfo] = useState({ name: "", phone: "", email: "", notes: "" });
+  const [recognizedClient, setRecognizedClient] = useState("");
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   
   const [booking, setBooking] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
-  const [whatsappLink, setWhatsappLink] = useState(null);
-  const isClientUser = user?.role === "client";
-
-  const datesContainerRef = useRef(null);
+  const [pixelId, setPixelId] = useState("");
 
   // Generates 30 days from today
   const availableDates = Array.from({ length: 30 }).map((_, i) => addDays(new Date(), i));
 
+  useEffect(() => {
+    api.get("/public/platform/pixel").then((res) => setPixelId(res.data?.pixel_id || "")).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!pixelId || document.getElementById("clickagenda-meta-pixel")) return;
+    window.fbq = window.fbq || function () { (window.fbq.q = window.fbq.q || []).push(arguments); };
+    window.fbq("init", pixelId);
+    const script = document.createElement("script");
+    script.id = "clickagenda-meta-pixel";
+    script.async = true;
+    script.src = "https://connect.facebook.net/en_US/fbevents.js";
+    document.head.appendChild(script);
+  }, [pixelId]);
+
+  const trackPixel = (event, params = {}) => {
+    if (pixelId && window.fbq) window.fbq("track", event, params);
+  };
+
+  useEffect(() => {
+    if (pixelId && profileData && window.fbq) {
+      window.fbq("track", "PageView");
+      window.fbq("track", "ViewContent", { content_name: profileData.professional?.business_name || profileData.professional?.name || "Agenda" });
+    }
+  }, [pixelId, profileData]);
+
   const loadProfile = useCallback(async () => {
+    if (previewMode) {
+      setProfileData(PUBLIC_PROFILE_PREVIEW);
+      setLoading(false);
+      return;
+    }
     try {
-      const [res, revRes] = await Promise.all([
-        api.get(`/public/${slug}`),
-        api.get(`/public/${slug}/reviews`).catch(() => ({ data: null }))
-      ]);
+      const res = await api.get(`/public/${slug}`);
       setProfileData(res.data);
-      if (revRes.data) setReviews(revRes.data);
       
       if (preSelectedService && res.data?.services) {
         const svc = res.data.services.find((s) => s.service_id === preSelectedService);
@@ -82,24 +126,24 @@ export default function PublicProfile() {
     } finally {
       setLoading(false);
     }
-  }, [slug, preSelectedService]);
+  }, [slug, preSelectedService, previewMode]);
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
-
-  useEffect(() => {
-    if (!isClientUser) return;
-    setClientInfo((prev) => ({
-      ...prev,
-      name: user?.name || prev.name,
-      phone: user?.phone || prev.phone,
-      email: user?.email || prev.email,
-    }));
-  }, [isClientUser, user]);
 
   const loadSlots = async (date) => {
     if (!selectedService) return;
     setLoadingSlots(true);
     setSelectedSlot(null);
+    if (previewMode) {
+      setSlots([
+        { start_time: "09:00", end_time: "10:00" },
+        { start_time: "10:30", end_time: "11:30" },
+        { start_time: "14:00", end_time: "15:00" },
+        { start_time: "16:30", end_time: "17:30" },
+      ]);
+      setLoadingSlots(false);
+      return;
+    }
     try {
       const dateStr = format(date, "yyyy-MM-dd");
       const res = await api.get(`/public/${slug}/slots?date=${dateStr}&service_id=${selectedService.service_id}`);
@@ -129,9 +173,29 @@ export default function PublicProfile() {
 
   const handleConfirmClick = () => {
     if (!clientInfo.name || !clientInfo.phone) {
+      trackPixel("InitiateCheckout", { content_name: selectedService?.name || "Agendamento" });
       setIsDataModalOpen(true);
     } else {
       handleBook();
+    }
+  };
+
+  const recognizeClient = async () => {
+    const phone = clientInfo.phone.replace(/\D/g, "");
+    if (phone.length < 10) {
+      setRecognizedClient("");
+      return;
+    }
+    try {
+      const res = await api.get(`/public/${slug}/client-lookup`, { params: { phone } });
+      if (res.data?.recognized && res.data?.name) {
+        setRecognizedClient(res.data.name);
+        setClientInfo((previous) => ({ ...previous, name: previous.name || res.data.name }));
+      } else {
+        setRecognizedClient("");
+      }
+    } catch {
+      setRecognizedClient("");
     }
   };
 
@@ -141,6 +205,17 @@ export default function PublicProfile() {
       return;
     }
     setBooking(true);
+    if (previewMode) {
+      setConfirmation({
+        service_name: selectedService.name,
+        date: format(selectedDate, "dd/MM/yyyy"),
+        start_time: selectedSlot.start_time,
+      });
+      setIsDataModalOpen(false);
+      setBooking(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     try {
       const res = await api.post(`/public/${slug}/book`, {
         service_id: selectedService.service_id,
@@ -151,24 +226,8 @@ export default function PublicProfile() {
         start_time: selectedSlot.start_time,
         notes: clientInfo.notes,
       });
-      if (isClientUser) {
-        const profilePayload = {};
-        if (!user?.phone && clientInfo.phone) profilePayload.phone = clientInfo.phone;
-        if (!user?.email && clientInfo.email) profilePayload.email = clientInfo.email;
-        if (!user?.name && clientInfo.name) profilePayload.name = clientInfo.name;
-        if (Object.keys(profilePayload).length > 0) {
-          const profileRes = await api.put("/profile", profilePayload);
-          updateUser(profileRes.data);
-        }
-      }
-      if (!user) {
-        localStorage.setItem(
-          "pending_client_register",
-          JSON.stringify({ name: clientInfo.name, phone: clientInfo.phone, email: clientInfo.email })
-        );
-      }
       setConfirmation(res.data);
-      setWhatsappLink(res.data.whatsapp_link || null);
+      trackPixel("Lead", { content_name: selectedService?.name || "Agendamento" });
       setIsDataModalOpen(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
       toast.success("Agendamento realizado!");
@@ -176,6 +235,23 @@ export default function PublicProfile() {
       toast.error(err.response?.data?.detail || "Erro ao agendar. Tente outro horario.");
     } finally {
       setBooking(false);
+    }
+  };
+
+  const shareProfile = async () => {
+    const shareData = {
+      title: `Agende com ${profileData?.professional?.business_name || profileData?.professional?.name || "este profissional"}`,
+      url: window.location.href,
+    };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success("Link copiado!");
+      }
+    } catch (error) {
+      if (error?.name !== "AbortError") toast.error("Não foi possível compartilhar o link");
     }
   };
 
@@ -191,6 +267,22 @@ export default function PublicProfile() {
   const { professional, services } = profileData;
   const displayName = professional.business_name || professional.name;
   const initials = displayName ? displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() : "?";
+  const location = [professional.city, professional.state].filter(Boolean).join(", ");
+  const social = professional.social_links || {};
+  const socialLinks = [
+    social.instagram && { label: "Instagram", value: social.instagram, icon: Instagram, href: `https://instagram.com/${social.instagram.replace("@", "")}` },
+    social.facebook && { label: "Facebook", value: social.facebook, icon: Facebook, href: `https://facebook.com/${social.facebook}` },
+    social.tiktok && { label: "TikTok", value: social.tiktok, icon: Video, href: `https://tiktok.com/@${social.tiktok.replace("@", "")}` },
+    social.youtube && { label: "YouTube", value: social.youtube, icon: Youtube, href: `https://youtube.com/${social.youtube}` },
+    social.website && { label: "Site", value: social.website, icon: Globe, href: social.website.startsWith("http") ? social.website : `https://${social.website}` },
+  ].filter(Boolean);
+  const whatsappLink = professional.phone
+    ? `https://wa.me/${professional.phone.replace(/\D/g, "")}`
+    : null;
+  const featuredIds = new Set((profileData.featured_services || []).map((service) => service.service_id));
+  const featuredServices = services.filter((service) => featuredIds.has(service.service_id));
+  const otherServices = services.filter((service) => !featuredIds.has(service.service_id));
+  const orderedServices = [...featuredServices, ...otherServices];
 
   // CONFIRMATION VIEW
   if (confirmation) {
@@ -229,7 +321,7 @@ export default function PublicProfile() {
               Agendamento Realizado!
             </h1>
             <p className="text-[#64748B] text-sm md:text-base px-4 mb-10 font-medium">
-              Sua reserva foi confirmada com sucesso. O profissional já foi notificado.
+              Sua reserva foi confirmada com sucesso. Guarde estes detalhes para o seu atendimento.
             </p>
           </div>
 
@@ -279,19 +371,10 @@ export default function PublicProfile() {
           </div>
 
           <div className="space-y-3">
-            {whatsappLink ? (
-              <a href={whatsappLink} target="_blank" rel="noopener noreferrer" className="block w-full">
-                <Button className="w-full h-14 bg-[#00D49D] hover:bg-[#00B98A] text-white text-[15px] font-bold rounded-xl shadow-lg shadow-[#00D49D]/25 transition-all active:scale-[0.98]">
-                  <MessageCircle className="h-5 w-5 mr-2" fill="currentColor" />
-                  Confirmar no WhatsApp
-                </Button>
-              </a>
-            ) : (
-                <Button className="w-full h-14 bg-[#00D49D] hover:bg-[#00B98A] text-white text-[15px] font-bold rounded-xl shadow-lg shadow-[#00D49D]/25 transition-all active:scale-[0.98]" onClick={() => window.location.reload()}>
-                  <CheckCircle2 className="h-5 w-5 mr-2" />
-                  Concluido
-                </Button>
-            )}
+            <Button className="w-full h-14 bg-[#00D49D] hover:bg-[#00B98A] text-white text-[15px] font-bold rounded-xl shadow-lg shadow-[#00D49D]/25 transition-all active:scale-[0.98]" onClick={() => window.location.reload()}>
+              <CheckCircle2 className="h-5 w-5 mr-2" />
+              Concluido
+            </Button>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               <Button variant="outline" className="h-14 w-full rounded-xl font-bold text-[#475569] bg-[#F1F5F9] border-transparent hover:bg-[#E2E8F0] active:scale-[0.98] transition-all">
@@ -305,8 +388,8 @@ export default function PublicProfile() {
         </div>
         
         <div className="mt-12 text-center text-xs text-[#94A3B8] font-medium space-y-1">
-           <MapPin className="h-3 w-3 inline-block mr-1"/> Sao Paulo, Brasil<br/>
-           © 2024 Agendamento SaaS. Todos os direitos reservados.
+           {location && <><MapPin className="h-3 w-3 inline-block mr-1"/>{location}<br/></>}
+           Agendamento online por {displayName}.
         </div>
       </div>
     );
@@ -314,154 +397,111 @@ export default function PublicProfile() {
 
   // BOOKING VIEW
   return (
-    <div className="min-h-screen bg-neutral-50 pb-40 font-sans" data-testid="public-profile-page">
-      {/* Header */}
-      <div className="bg-white border-b border-border/50 sticky top-0 z-40 px-4 py-3 flex items-center justify-between shadow-sm">
-        <Link to="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 bg-[#00D49D] rounded-lg flex items-center justify-center shrink-0 shadow-sm">
-            <CalendarDays className="text-white h-4 w-4" />
+    <div className="min-h-screen bg-[#f1f8f5] pb-40 font-sans" data-testid="public-profile-page">
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-[430px] bg-[radial-gradient(circle_at_50%_0%,rgba(20,184,143,0.18),transparent_62%)]" />
+      <div className="relative mx-auto max-w-xl px-4 pt-7 sm:px-5 sm:pt-10">
+        <section className="overflow-hidden rounded-[34px] bg-white shadow-[0_24px_70px_rgba(26,78,63,0.16)] ring-1 ring-[#dcefe8]">
+          <div
+            className="relative h-32 bg-gradient-to-br from-[#0ebc91] via-[#26c6a2] to-[#60d7c3] sm:h-40"
+            style={professional.cover_picture ? { backgroundImage: `url(${professional.cover_picture})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
+          >
+            <div className="absolute inset-0 bg-[linear-gradient(120deg,rgba(5,86,67,0.25),transparent_52%,rgba(255,255,255,0.12))]" />
+            <div className="absolute -bottom-16 -right-12 h-40 w-40 rounded-full border-[18px] border-white/20" />
+            <div className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-full border border-white/35 bg-white/15 px-3 py-1.5 text-[11px] font-bold tracking-wide text-white backdrop-blur-md">
+              <span className="h-2 w-2 rounded-full bg-[#d7fff5] shadow-[0_0_12px_#d7fff5]" />
+              AGENDA ABERTA
+            </div>
+            <button onClick={shareProfile} className="absolute right-4 top-4 grid h-10 w-10 place-items-center rounded-full border border-white/35 bg-white/15 text-white backdrop-blur-md transition hover:scale-105 hover:bg-white/25" aria-label="Compartilhar perfil">
+              <Share2 className="h-4 w-4" />
+            </button>
           </div>
-          <span className="font-heading font-bold text-foreground text-lg">AgendeAqui</span>
-        </Link>
-        {!user && (
-          <Link to="/login">
-            <Button variant="ghost" className="text-[#00D49D] font-medium">Entrar</Button>
-          </Link>
-        )}
-      </div>
 
-      <div className="max-w-xl mx-auto px-4 pt-8 md:pt-10">
-        {/* Profile Info */}
-        <div className="flex flex-col items-center text-center mb-10 animate-fade-in space-y-3">
-          <div className="relative inline-block">
-            <Avatar className="h-24 w-24 border-4 border-white shadow-md">
-              <AvatarImage src={professional.picture} alt={professional.name} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold">
-                {initials}
-              </AvatarFallback>
+          <div className="px-5 pb-6 text-center sm:px-8">
+            <Avatar className="-mt-14 mx-auto h-28 w-28 border-[5px] border-white bg-white shadow-[0_12px_30px_rgba(20,74,60,0.22)] sm:h-32 sm:w-32">
+              <AvatarImage src={professional.picture} alt={displayName} />
+              <AvatarFallback className="bg-[#dff9f0] text-3xl font-black text-[#08745b]">{initials}</AvatarFallback>
             </Avatar>
-            <div className="absolute bottom-1 right-1 h-5 w-5 rounded-full bg-[#00D49D] border-[3px] border-white" />
-          </div>
-          
-          <div>
-            <h1 className="font-heading text-2xl font-bold text-foreground">
-              {displayName}
-            </h1>
-            <p className="text-sm text-[#00D49D] font-medium mt-0.5">
-              {professional.business_type || professional.bio || "Profissional parceiro"}
-            </p>
-          </div>
-          
-          {professional.social_links && Object.values(professional.social_links).some(v => v) && (
-            <div className="flex items-center justify-center gap-4 mt-1">
-              {professional.social_links.instagram && (
-                <a href={`https://instagram.com/${professional.social_links.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
-                  <Instagram className="h-[18px] w-[18px]" />
-                </a>
-              )}
-              {professional.social_links.whatsapp && (
-                <a href={`https://wa.me/${professional.social_links.whatsapp.replace(/[^0-9]/g, '')}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
-                  <MessageCircle className="h-[18px] w-[18px]" />
-                </a>
-              )}
-              {professional.social_links.facebook && (
-                <a href={`https://facebook.com/${professional.social_links.facebook}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
-                  <Facebook className="h-[18px] w-[18px]" />
-                </a>
-              )}
-              {professional.social_links.tiktok && (
-                <a href={`https://tiktok.com/@${professional.social_links.tiktok.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
-                  <Video className="h-[18px] w-[18px]" />
-                </a>
-              )}
-              {professional.social_links.youtube && (
-                <a href={`https://youtube.com/${professional.social_links.youtube}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
-                  <Youtube className="h-[18px] w-[18px]" />
-                </a>
-              )}
-              {professional.social_links.website && (
-                <a href={professional.social_links.website.startsWith('http') ? professional.social_links.website : `https://${professional.social_links.website}`} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-green-600 transition-colors">
-                  <Globe className="h-[18px] w-[18px]" />
-                </a>
-              )}
+            <div className="mt-4 flex items-center justify-center gap-1.5">
+              <h1 className="font-heading text-[26px] font-black tracking-tight text-[#102a24] sm:text-3xl">{displayName}</h1>
+              <BadgeCheck className="h-5 w-5 shrink-0 fill-[#16b890] text-white" aria-label="Perfil verificado" />
             </div>
-          )}
+            <p className="mt-1.5 text-sm font-bold text-[#049b78]">{professional.business_type || "Atendimento com horário marcado"}</p>
 
-          <div className="flex flex-col items-center gap-4">
-            {professional.bio && professional.bio.length > 5 && (
-              <p className="text-xs sm:text-sm text-muted-foreground max-w-sm leading-relaxed">
-                {professional.bio}
-              </p>
-            )}
-            
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <div className="flex items-center gap-1.5 bg-white border border-border/50 px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm text-foreground">
-                <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500 mb-0.5" />
-                {reviews?.total > 0 ? reviews.average : "5.0"} <span className="text-muted-foreground font-medium">({reviews?.total || 120} avaliacoes)</span>
-              </div>
-              <div className="flex items-center gap-1.5 bg-white border border-border/50 px-3 py-1.5 rounded-full text-xs font-semibold shadow-sm text-foreground">
-                <CheckCircle2 className="h-3.5 w-3.5 text-[#00D49D] fill-[#00D49D]/20" />
-                Verificado
-              </div>
+            <div className="mt-5 flex flex-wrap justify-center gap-2.5">
+              {whatsappLink && <a href={whatsappLink} target="_blank" rel="noopener noreferrer" aria-label="Conversar pelo WhatsApp" className="grid h-10 w-10 place-items-center rounded-full border border-[#c9e7de] bg-white text-[#0d9474] shadow-sm transition hover:-translate-y-0.5 hover:border-[#47c9ad] hover:bg-[#effcf7]"><MessageCircle className="h-4.5 w-4.5" /></a>}
+              {socialLinks.slice(0, 3).map(({ label, icon: Icon, href }) => <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label} title={label} className="grid h-10 w-10 place-items-center rounded-full border border-[#c9e7de] bg-white text-[#0d9474] shadow-sm transition hover:-translate-y-0.5 hover:border-[#47c9ad] hover:bg-[#effcf7]"><Icon className="h-4 w-4" /></a>)}
+              <button onClick={shareProfile} aria-label="Copiar link do perfil" className="grid h-10 w-10 place-items-center rounded-full border border-[#c9e7de] bg-white text-[#0d9474] shadow-sm transition hover:-translate-y-0.5 hover:border-[#47c9ad] hover:bg-[#effcf7]"><Share2 className="h-4 w-4" /></button>
             </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-[#55746b]">
+              {location && <span className="inline-flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-[#078b6d]" />{location}</span>}
+              {location && <span className="h-1 w-1 rounded-full bg-[#b3cec5]" />}
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e6f8f2] px-3 py-1.5 text-[#078b6d]"><CalendarDays className="h-3.5 w-3.5" />Reservas online</span>
+            </div>
+            {professional.bio && <p className="mx-auto mt-5 max-w-md text-sm leading-relaxed text-[#536f67]">{professional.bio}</p>}
+
+            <button onClick={() => document.getElementById("agendamento")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="mt-6 flex w-full items-center justify-between rounded-2xl bg-[#0db892] px-5 py-4 text-left text-white shadow-[0_12px_26px_rgba(13,184,146,0.25)] transition hover:-translate-y-0.5 hover:bg-[#099f7d] active:translate-y-0">
+              <span className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/18"><CalendarDays className="h-5 w-5" /></span><span><span className="block text-sm font-black">Agendar agora</span><span className="mt-0.5 block text-xs text-white/80">Escolha um serviço e seu melhor horário</span></span></span>
+              <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/18"><ArrowRight className="h-4 w-4" /></span>
+            </button>
           </div>
-        </div>
+        </section>
+
+        <section className="mt-4 grid grid-cols-2 overflow-hidden rounded-2xl border border-[#dcefe8] bg-white shadow-[0_10px_30px_rgba(23,75,60,0.06)]">
+          <div className="flex items-center gap-3 px-4 py-3.5"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#e6f8f2] text-[#078b6d]"><Briefcase className="h-4 w-4" /></span><span><span className="block text-[11px] font-bold uppercase tracking-wide text-[#89a69d]">Serviços</span><span className="block text-sm font-black text-[#1c4036]">{services.length} disponíveis</span></span></div>
+          <div className="flex items-center gap-3 border-l border-[#e6f1ed] px-4 py-3.5"><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#e6f8f2] text-[#078b6d]"><Clock className="h-4 w-4" /></span><span><span className="block text-[11px] font-bold uppercase tracking-wide text-[#89a69d]">Reserva</span><span className="block text-sm font-black text-[#1c4036]">Em poucos passos</span></span></div>
+        </section>
 
         {/* Section 1: Services */}
-        <div className="mb-8">
-          <h2 className="font-heading text-lg font-bold mb-4 flex items-center gap-2">
-            <div className="h-6 w-6 bg-[#00D49D]/10 text-[#00D49D] rounded flex items-center justify-center shrink-0">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg>
-            </div>
-            Selecione o servico
-          </h2>
+        <div id="agendamento" className="mt-6 mb-8 scroll-mt-4">
+          <div className="mb-4 flex items-end justify-between px-1">
+            <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#138c76]">Agendamento</p><h2 className="mt-1 font-heading text-xl font-black tracking-tight text-[#17342f]">Escolha seu serviço</h2></div>
+            <span className="rounded-full bg-[#def7ee] px-3 py-1.5 text-xs font-bold text-[#147661]">1 de 3</span>
+          </div>
           <div className="space-y-3">
-            {services.map((svc) => {
+            {orderedServices.map((svc) => {
               const isActive = selectedService?.service_id === svc.service_id;
+              const isFeatured = featuredIds.has(svc.service_id);
               return (
-                <div
+                <button
                   key={svc.service_id}
                   onClick={() => setSelectedService(svc)}
-                  className={`group relative flex items-center justify-between p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                    isActive ? "border-[#00D49D] bg-[#00D49D]/[0.03]" : "border-border/50 bg-white hover:border-border"
+                  className={`group relative flex w-full items-center justify-between rounded-2xl border p-4 text-left transition-all ${
+                    isActive ? "border-[#13a189] bg-[#e7faf3] shadow-[0_10px_22px_rgba(19,161,137,0.12)]" : "border-white bg-white shadow-[0_6px_18px_rgba(23,52,47,0.05)] hover:-translate-y-0.5 hover:border-[#bfeade]"
                   }`}
                 >
-                  <div>
-                    <h3 className="font-bold text-foreground text-sm">{svc.name}</h3>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground font-medium">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2"><h3 className="truncate font-black text-[#17342f] text-sm">{svc.name}</h3>{isFeatured && <span className="rounded-full bg-[#dff8ee] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#168b76]">Destaque</span>}</div>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-[#728982] font-semibold">
                       <span className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {svc.duration_minutes} min
                       </span>
-                      {svc.price > 0 && <span className="font-bold text-foreground">R$ {svc.price.toFixed(2).replace(".", ",")}</span>}
+                      {svc.description && <span className="truncate max-w-[160px]">• {svc.description}</span>}
                     </div>
                   </div>
-                  <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${isActive ? "border-[#00D49D]" : "border-muted-foreground/30 group-hover:border-muted-foreground/50"}`}>
-                    {isActive && <div className="h-2.5 w-2.5 bg-[#00D49D] rounded-full" />}
-                  </div>
-                </div>
+                  <div className="ml-3 flex shrink-0 items-center gap-3"><span className="text-sm font-black text-[#17342f]">{svc.price > 0 ? `R$ ${svc.price.toFixed(2).replace(".", ",")}` : "A combinar"}</span><div className={`grid h-7 w-7 place-items-center rounded-full transition-colors ${isActive ? "bg-[#13a189] text-white" : "bg-[#edf8f4] text-[#168b76]"}`}><ChevronRight className="h-4 w-4" /></div></div>
+                </button>
               );
             })}
+            {services.length === 0 && <div className="rounded-2xl border border-dashed border-[#b9d8ce] bg-white p-8 text-center text-sm font-medium text-[#678078]">Este profissional ainda não publicou serviços.</div>}
           </div>
         </div>
 
         {/* Section 2: Date */}
         <div className={`mb-8 transition-opacity duration-300 ${!selectedService ? "opacity-40 pointer-events-none" : "opacity-100"}`}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-heading text-lg font-bold flex items-center gap-2">
-              <div className="h-6 w-6 bg-[#00D49D]/10 text-[#00D49D] rounded flex items-center justify-center shrink-0">
-                <CalendarDays className="h-3.5 w-3.5" />
-              </div>
-              Escolha a data
-            </h2>
-            <span className="text-[13px] font-semibold text-muted-foreground capitalize">
+            <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#138c76]">Próximo passo</p><h2 className="mt-1 font-heading text-xl font-black tracking-tight text-[#17342f]">Escolha a data</h2></div>
+            <span className="rounded-full bg-[#def7ee] px-3 py-1.5 text-xs font-bold text-[#147661]">
+               {selectedDate ? format(selectedDate, "MMM", { locale: ptBR }) : "2 de 3"}
+            </span>
+            <span className="hidden text-[13px] font-semibold text-muted-foreground capitalize">
                {selectedDate ? format(selectedDate, "MMMM yyyy", { locale: ptBR }) : ""}
             </span>
           </div>
           
           <div 
-            ref={datesContainerRef}
-            className="flex gap-2.5 overflow-x-auto pb-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden snap-x px-4 -mx-4 md:px-0 md:mx-0"
+            className="flex gap-2.5 overflow-x-auto pb-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden snap-x px-1 -mx-1"
             style={{ scrollBehavior: 'smooth' }}
           >
             {availableDates.map((date) => {
@@ -475,8 +515,8 @@ export default function PublicProfile() {
                   onClick={() => handleDateSelect(date)}
                   className={`flex shrink-0 flex-col items-center justify-center w-[60px] h-20 rounded-2xl transition-all snap-start ${
                     isActive 
-                      ? "bg-[#00D49D] text-white shadow-md shadow-[#00D49D]/20 scale-105" 
-                      : "bg-white border text-foreground hover:bg-neutral-50 border-transparent hover:border-border"
+                      ? "bg-[#13a189] text-white shadow-md shadow-[#13a189]/25 scale-105"
+                      : "bg-white border border-white text-[#17342f] hover:border-[#bfeade] shadow-[0_5px_14px_rgba(23,52,47,0.05)]"
                   }`}
                   style={!isActive ? { boxShadow: "0 2px 8px -2px rgba(0,0,0,0.05)" } : {}}
                 >
@@ -490,14 +530,9 @@ export default function PublicProfile() {
 
         {/* Section 3: Time */}
         <div className={`mb-12 transition-opacity duration-300 ${!selectedDate ? "opacity-40 pointer-events-none" : "opacity-100"}`}>
-          <h2 className="font-heading text-lg font-bold mb-4 flex items-center gap-2">
-            <div className="h-6 w-6 bg-[#00D49D]/10 text-[#00D49D] rounded flex items-center justify-center shrink-0">
-              <Clock className="h-3.5 w-3.5" />
-            </div>
-            Horarios disponiveis
-          </h2>
+          <div className="mb-4 flex items-end justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#138c76]">Quase lá</p><h2 className="mt-1 font-heading text-xl font-black tracking-tight text-[#17342f]">Horários disponíveis</h2></div><span className="rounded-full bg-[#def7ee] px-3 py-1.5 text-xs font-bold text-[#147661]">3 de 3</span></div>
           
-          <div className="bg-white rounded-2xl p-[18px] shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] border border-transparent">
+          <div className="bg-white rounded-[22px] p-[18px] shadow-[0_8px_24px_rgba(23,52,47,0.06)] border border-white">
             {loadingSlots ? (
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -518,8 +553,8 @@ export default function PublicProfile() {
                       onClick={() => setSelectedSlot(slot)}
                       className={`h-[42px] rounded-xl text-sm font-bold transition-all border ${
                         isActive
-                          ? "border-[#00D49D] bg-[#00D49D]/10 text-[#00D49D]"
-                          : "border-border/60 bg-white text-foreground hover:border-border hover:bg-neutral-50 shadow-sm"
+                          ? "border-[#13a189] bg-[#e7faf3] text-[#168b76]"
+                          : "border-[#dce9e4] bg-white text-[#17342f] hover:border-[#8fd9c5] hover:bg-[#f5fcf8] shadow-sm"
                       }`}
                     >
                       {slot.start_time}
@@ -534,38 +569,38 @@ export default function PublicProfile() {
 
       {/* Sticky Bottom Actions */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 bg-white border-t border-border/50 shadow-[0_-15px_40px_rgba(0,0,0,0.05)] p-4 md:p-6 transition-transform duration-300 z-50 ${
+        className={`fixed bottom-0 left-0 right-0 border-t border-[#dce9e4] bg-white/95 shadow-[0_-15px_40px_rgba(23,52,47,0.10)] p-4 backdrop-blur-xl md:p-5 transition-transform duration-300 z-50 ${
           selectedSlot ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        <div className="max-w-xl mx-auto">
+        <div className="max-w-2xl mx-auto">
           <div className="flex justify-between items-end mb-4">
             <div>
-              <p className="text-[11px] text-muted-foreground font-bold tracking-widest uppercase">Total</p>
-              <p className="text-xl md:text-2xl font-black text-foreground leading-none mt-1">
-                R$ {selectedService?.price > 0 ? selectedService.price.toFixed(2).replace(".", ",") : "0,00"}
+              <p className="text-[11px] text-[#728982] font-bold tracking-widest uppercase">Seu horário</p>
+              <p className="text-xl md:text-2xl font-black text-[#17342f] leading-none mt-1">
+                {selectedService?.price > 0 ? `R$ ${selectedService.price.toFixed(2).replace(".", ",")}` : "A combinar"}
               </p>
             </div>
             <div className="text-right">
-              <p className="font-bold text-foreground text-[13px] md:text-sm">
+              <p className="font-bold text-[#17342f] text-[13px] md:text-sm">
                 {selectedDate && format(selectedDate, "EEE, dd MMM", { locale: ptBR }).replace(".", "")}
               </p>
-              <p className="text-muted-foreground text-[13px] md:text-sm font-semibold">
+              <p className="text-[#728982] text-[13px] md:text-sm font-semibold">
                 as {selectedSlot?.start_time}
               </p>
             </div>
           </div>
           
           <Button 
-            className="w-full h-[52px] bg-[#00D49D] hover:bg-[#00B98A] text-white text-[15px] font-bold rounded-xl shadow-lg shadow-[#00D49D]/25 transition-all active:scale-[0.98]"
+            className="w-full h-[54px] bg-[#13a189] hover:bg-[#0f8d78] text-white text-[15px] font-bold rounded-2xl shadow-lg shadow-[#13a189]/25 transition-all active:scale-[0.98]"
             onClick={handleConfirmClick}
             disabled={booking}
           >
-            {booking ? "Confirmando..." : "Confirmar Agendamento"} <ArrowRight className="ml-2 h-4 w-4" />
+            {booking ? "Confirmando..." : "Continuar para confirmação"} <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
 
-          <p className="text-[10px] md:text-xs text-center text-muted-foreground mt-3 font-medium">
-            Ao confirmar, voce concorda com os <a href="#" className="underline">Termos de Uso</a> e <a href="#" className="underline">Politica de Cancelamento</a>.
+          <p className="text-[10px] md:text-xs text-center text-[#789088] mt-3 font-medium">
+            Você informará seus dados apenas para concluir a reserva.
           </p>
         </div>
       </div>
@@ -588,22 +623,27 @@ export default function PublicProfile() {
                   onChange={(e) => setClientInfo((p) => ({ ...p, name: e.target.value }))}
                   placeholder="Ex: Joao da Silva"
                   className="pl-10 h-12 rounded-xl bg-neutral-50/80 border-border/60 hover:border-border focus:border-[#00D49D] font-medium"
-                  disabled={isClientUser && !!user?.name}
                 />
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-foreground font-bold text-xs tracking-wide">WhatsApp *</Label>
+              <Label className="text-foreground font-bold text-xs tracking-wide">Telefone *</Label>
               <div className="relative">
                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                 <Input
                   value={clientInfo.phone}
-                  onChange={(e) => setClientInfo((p) => ({ ...p, phone: e.target.value }))}
+                  onChange={(e) => {
+                    setRecognizedClient("");
+                    setClientInfo((p) => ({ ...p, phone: e.target.value }));
+                  }}
+                  onBlur={recognizeClient}
                   placeholder="(11) 99999-9999"
                   className="pl-10 h-12 rounded-xl bg-neutral-50/80 border-border/60 hover:border-border focus:border-[#00D49D] font-medium"
-                  disabled={isClientUser && !!user?.phone}
                 />
               </div>
+              {recognizedClient && (
+                <p className="text-xs font-medium text-emerald-700">Bem-vindo de volta, {recognizedClient}!</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-foreground font-bold text-xs tracking-wide">E-mail (opcional)</Label>
@@ -614,7 +654,6 @@ export default function PublicProfile() {
                   onChange={(e) => setClientInfo((p) => ({ ...p, email: e.target.value }))}
                   placeholder="seu@email.com"
                   className="pl-10 h-12 rounded-xl bg-neutral-50/80 border-border/60 hover:border-border focus:border-[#00D49D] font-medium"
-                  disabled={isClientUser && !!user?.email}
                 />
               </div>
             </div>

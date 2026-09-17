@@ -443,7 +443,7 @@ export default function Settings() {
                 </CardHeader>
                 <CardContent>
                   <div className="rounded-xl border border-border overflow-hidden">
-                    <div className="h-24 bg-gradient-to-br from-teal-50 to-stone-100 relative">
+                    <div className="h-24 bg-gradient-to-br from-teal-50 to-stone-100 relative bg-cover bg-center" style={profile.cover_picture ? { backgroundImage: `url(${profile.cover_picture})` } : undefined}>
                     </div>
                     <div className="p-4 flex items-center gap-3">
                       <div className="h-12 w-12 rounded-full overflow-hidden bg-muted flex items-center justify-center">
@@ -490,6 +490,22 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
+                <div className="space-y-3">
+                  <Label>Imagem de capa</Label>
+                  <div className="space-y-3">
+                    <div className="h-20 w-full overflow-hidden rounded-xl bg-gradient-to-br from-teal-50 to-stone-100 bg-cover bg-center" style={profile.cover_picture ? { backgroundImage: `url(${profile.cover_picture})` } : undefined}>
+                      {!profile.cover_picture && <div className="grid h-full place-items-center text-xs text-muted-foreground">Sua capa aparecerá aqui</div>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input className="max-w-sm" type="file" accept="image/*" onChange={(e) => handleImageUpload("cover_picture", e.target.files?.[0])} disabled={uploading.cover_picture} />
+                      {profile.cover_picture && (
+                        <Button variant="outline" size="sm" onClick={() => setProfile((p) => ({ ...p, cover_picture: "" }))}>
+                          Remover
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
             <Card className="shadow-soft">
@@ -508,10 +524,6 @@ export default function Settings() {
                 <div className="space-y-2">
                   <Label>TikTok</Label>
                   <Input value={profile.social_links?.tiktok || ""} onChange={(e) => updateSocialLink("tiktok", e.target.value)} placeholder="@seuusuario" />
-                </div>
-                <div className="space-y-2">
-                  <Label>WhatsApp</Label>
-                  <Input value={profile.social_links?.whatsapp || ""} onChange={(e) => updateSocialLink("whatsapp", e.target.value)} placeholder="11999999999" />
                 </div>
                 <div className="space-y-2">
                   <Label>YouTube</Label>

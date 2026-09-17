@@ -1,4 +1,4 @@
-# SalãoZap - PRD (Product Requirements Document)
+# ClickAgenda - PRD (Product Requirements Document)
 
 ## Problema Original
 Plataforma web PWA de gestao + agendamento inteligente para profissionais (saloes, clinicas, terapeutas).
@@ -6,8 +6,8 @@ Plataforma web PWA de gestao + agendamento inteligente para profissionais (saloe
 ## Arquitetura
 - **Frontend**: React 19 + Tailwind CSS + Shadcn/UI
 - **Backend**: FastAPI (Python)
-- **Banco**: MongoDB (Motor async driver)
-- **Auth**: JWT sessions + Google OAuth (Emergent Auth)
+- **Banco**: Supabase Postgres
+- **Auth**: Supabase Auth com cookie HTTP-only
 - **Design**: "Soft Utility" theme (Deep Teal + Rose/Coral + Warm Stone)
 
 ## Personas
@@ -18,7 +18,7 @@ Plataforma web PWA de gestao + agendamento inteligente para profissionais (saloe
 ## O que foi implementado (MVP - Fev 2026)
 
 ### Backend (FastAPI)
-- Auth completa (registro, login, Google OAuth, sessoes, logout)
+- Auth por e-mail e senha, sessão HTTP-only e limitação de tentativas
 - CRUD de servicos (nome, duracao, preco, buffer, categoria)
 - CRUD de clientes (nome, telefone, email, tags, observacoes)
 - CRUD de agendamentos com deteccao de conflitos
@@ -28,7 +28,7 @@ Plataforma web PWA de gestao + agendamento inteligente para profissionais (saloe
 - Dashboard com estatisticas
 - WhatsApp mock (estrutura pronta para Evolution API)
 - Gerenciamento de agendamento via token seguro (confirmar/cancelar)
-- Indices MongoDB para performance
+- Índices Postgres, RLS e restrição de conflito de horários
 
 ### Frontend (React)
 - Landing page com hero, features, how-it-works, CTA
@@ -57,11 +57,11 @@ Plataforma web PWA de gestao + agendamento inteligente para profissionais (saloe
 - [ ] Arrastar e soltar no calendario para reagendar
 - [ ] Recorrencia inteligente (sugerir proximos agendamentos)
 - [ ] Avaliacao pos-atendimento
-- [ ] Super admin panel
+- [x] Painel superadmin com crescimento, reservas, receita e planos
 
 ### P2
 - [ ] Integracao real WhatsApp (Evolution API)
-- [ ] Pagamentos online / sinal (Stripe/PIX)
+- [x] Cobrança Pro: Stripe e Pix Woovi/OpenPix por webhook validado
 - [ ] Campanhas e marketing
 - [ ] Multi-tenant completo
 - [ ] PWA offline completo com service worker

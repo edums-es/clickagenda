@@ -8,7 +8,6 @@ import {
   ArrowRight,
   Zap,
   Users,
-  MessageSquare,
   Clock,
   Smartphone,
   Calendar,
@@ -24,7 +23,7 @@ export default function Landing() {
   const { user, loading } = useAuth();
 
   if (!loading && user) {
-    return <Navigate to={user.role === "client" ? "/cliente" : "/dashboard"} replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
@@ -77,7 +76,7 @@ export default function Landing() {
               </h1>
               
               <p className="mt-8 text-lg text-gray-600 max-w-xl leading-relaxed">
-                Crie seu link de agendamento profissional em minutos e esqueça o vai e vem de mensagens. Otimizado para o WhatsApp e o mercado brasileiro.
+                Crie seu link de agendamento profissional em minutos e deixe sua agenda organizada, sem troca de mensagens para encontrar horários.
               </p>
               
               <div className="mt-10 flex flex-col sm:flex-row items-center gap-4">
@@ -117,7 +116,7 @@ export default function Landing() {
                   <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
                   <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
                   <div className="ml-4 flex-1 h-4 bg-gray-200/50 rounded-full text-[8px] flex items-center px-2 text-gray-400">
-                    salaozap.com/seu-agendamento
+                    clickagenda.com/seu-agendamento
                   </div>
                 </div>
                 <div className="p-6 sm:p-8 space-y-6">
@@ -172,7 +171,7 @@ export default function Landing() {
               {
                 icon: Smartphone,
                 title: "2. Compartilhe o link",
-                desc: "Coloque seu link exclusivo na bio do Instagram ou envie diretamente pelo WhatsApp."
+                desc: "Coloque seu link exclusivo na bio do Instagram, no Google ou onde seus clientes encontrarem você."
               },
               {
                 icon: ShieldCheck,
@@ -198,10 +197,10 @@ export default function Landing() {
           <div className="grid lg:grid-cols-2 gap-20 items-center">
             <div className="grid grid-cols-2 gap-4 lg:gap-6 order-2 lg:order-1">
               {[
-                { icon: MessageSquare, title: "Integração Whats", desc: "Notificações automáticas direto no celular do seu cliente." },
-                { icon: Calendar, title: "Sincronização", desc: "Conecte com Google Calendar e Apple Calendar." },
-                { icon: Smartphone, title: "Pagamento Pix", desc: "Receba o valor da consultoria antes mesmo do atendimento." },
-                { icon: MousePointer2, title: "Relatórios", desc: "Analise seu crescimento mensal com dados reais." }
+                { icon: CalendarDays, title: "Agenda online", desc: "Horários disponíveis atualizados em tempo real." },
+                { icon: Calendar, title: "Organização", desc: "Serviços, duração e intervalos no mesmo lugar." },
+                { icon: Users, title: "Clientes", desc: "Histórico e dados de atendimento sempre à mão." },
+                { icon: MousePointer2, title: "Link público", desc: "Uma página simples para seus clientes agendarem." }
               ].map((feat, idx) => (
                 <div key={idx} className={`p-6 rounded-3xl border border-gray-100 shadow-sm transition-all hover:shadow-xl hover:border-transparent ${idx % 2 === 1 ? 'lg:translate-y-8' : ''} bg-white`}>
                   <div className="w-12 h-12 bg-primary/5 rounded-2xl flex items-center justify-center mb-6 text-primary border border-primary/10">
@@ -249,7 +248,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               {
-                text: "\"O SalãoZap mudou minha rotina. Meus pacientes adoram a facilidade de marcar pelo WhatsApp sem eu precisar parar meus atendimentos.\"",
+                text: "\"O SalãoZap mudou minha rotina. Meus pacientes marcam sozinhos e eu não preciso parar meus atendimentos.\"",
                 author: "Mariana Silva",
                 role: "Dentista",
                 img: "https://i.pravatar.cc/100?img=32"
@@ -301,7 +300,7 @@ export default function Landing() {
                 name: "Start",
                 price: "Grátis",
                 desc: "Para quem está começando agora.",
-                features: ["Página pública personalizada", "Agendamentos ilimitados", "WhatsApp básico"]
+                features: ["Página pública personalizada", "Agendamentos ilimitados", "Cadastro de clientes"]
               },
               {
                 name: "Pro",

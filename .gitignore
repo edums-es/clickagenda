@@ -7,6 +7,9 @@
 # Dependencies
 node_modules/
 /node_modules
+/.pnpm-store/
+frontend/pnpm-lock.yaml
+frontend/pnpm-workspace.yaml
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -82,3 +85,4 @@ android-sdk/ frontend/node_modules/.cache/default-development/3.pack
 # Environment files
 *.env
 *.env.*
+!backend/.env.example

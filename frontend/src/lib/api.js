@@ -54,9 +54,13 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // 500+ — erro interno do servidor
+    // 500+ — erro interno do servidor. As telas de autenticação exibem
+    // a mensagem detalhada retornada pelo backend, sem duplicar alertas.
     if (status >= 500) {
-      toast.error("Algo deu errado no servidor. Tente novamente em instantes.");
+      const isAuthRequest = error.config?.url?.startsWith("/auth/");
+      if (!isAuthRequest) {
+        toast.error("Algo deu errado no servidor. Tente novamente em instantes.");
+      }
       return Promise.reject(error);
     }
 

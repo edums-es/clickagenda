@@ -235,7 +235,7 @@ export default function OnboardingWizard({ open, onComplete }) {
               <div className="p-4 bg-muted/50 rounded-lg border flex flex-col items-center gap-3">
                 <p className="text-sm font-medium text-muted-foreground">Seu link publico:</p>
                 <code className="text-lg font-mono bg-background px-3 py-1 rounded border">
-                  salaozap.com/p/{user?.slug}
+                  clickagenda.com/p/{user?.slug}
                 </code>
               </div>
               

@@ -8,7 +8,11 @@ import {
   Settings,
   LogOut,
   Zap,
-  MessageCircle
+  CreditCard,
+  ShieldCheck,
+  PlugZap,
+  Megaphone,
+  LockKeyhole
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -17,12 +21,20 @@ const navItems = [
   { to: "/agenda", icon: CalendarDays, label: "Agendamentos" },
   { to: "/servicos", icon: Scissors, label: "Servicos" },
   { to: "/clientes", icon: Users, label: "Clientes" },
-  { to: "/whatsapp", icon: MessageCircle, label: "WhatsApp IA" },
+];
+
+const adminNavItems = [
+  { to: "/superadmin", icon: ShieldCheck, label: "Visão geral" },
+  { to: "/superadmin/integracoes", icon: PlugZap, label: "Cobrança e APIs" },
+  { to: "/superadmin/marketing", icon: Megaphone, label: "Marketing e Pixel" },
+  { to: "/superadmin/seguranca", icon: LockKeyhole, label: "Segurança" },
 ];
 
 export default function Sidebar({ onClose }) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const isSuperadmin = user?.role === "superadmin";
+  const visibleNavItems = isSuperadmin ? adminNavItems : navItems;
 
   const handleLogout = async () => {
     await logout();
@@ -37,14 +49,14 @@ export default function Sidebar({ onClose }) {
         </div>
         <div>
           <h1 className="font-heading text-[17px] font-bold text-foreground leading-tight">
-            SalãoZap
+            {isSuperadmin ? "ClickAgenda" : "SalãoZap"}
           </h1>
-          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Painel do Profissional</p>
+          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">{isSuperadmin ? "Controle da plataforma" : "Painel do Profissional"}</p>
         </div>
       </div>
 
       <nav className="flex-1 px-4 py-2 space-y-1">
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -66,7 +78,7 @@ export default function Sidebar({ onClose }) {
 
       <div className="px-4 pb-6 space-y-4">
         <div className="space-y-1">
-          <NavLink
+          {!isSuperadmin && <NavLink
             to="/configuracoes"
             onClick={onClose}
             className={({ isActive }) =>
@@ -79,7 +91,10 @@ export default function Sidebar({ onClose }) {
           >
             <Settings className="h-5 w-5" />
             Configuracoes
-          </NavLink>
+          </NavLink>}
+          {!isSuperadmin && <NavLink to="/billing" onClick={onClose} className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl text-[14px] transition-all ${isActive ? "bg-[#00D49D]/15 text-[#00D49D] font-bold" : "text-[#64748B] font-semibold hover:bg-neutral-100/50"}`}>
+            <CreditCard className="h-5 w-5" /> Assinatura
+          </NavLink>}
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[14px] text-[#64748B] font-semibold hover:bg-red-50 hover:text-red-500 transition-all duration-200"
@@ -89,13 +104,11 @@ export default function Sidebar({ onClose }) {
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-border/50 shadow-sm">
+        {!isSuperadmin && <div className="bg-white rounded-2xl p-4 border border-border/50 shadow-sm">
           <p className="text-[10px] text-muted-foreground font-bold tracking-widest uppercase mb-1">Seu Plano</p>
-          <p className="font-bold text-sm text-foreground mb-3">SalãoZap Pro</p>
-          <Button variant="outline" className="w-full h-9 text-xs font-bold text-[#00D49D] bg-[#00D49D]/10 border-transparent hover:bg-[#00D49D]/20">
-            Ver Detalhes
-          </Button>
-        </div>
+          <p className="font-bold text-sm text-foreground mb-3">{user?.plan === "pro" ? "ClickAgenda Pro" : "Freemium"}</p>
+          <Button onClick={() => navigate("/billing")} variant="outline" className="w-full h-9 text-xs font-bold text-[#00D49D] bg-[#00D49D]/10 border-transparent hover:bg-[#00D49D]/20">Ver assinatura</Button>
+        </div>}
       </div>
     </aside>
   );

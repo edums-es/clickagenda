@@ -21,7 +21,6 @@ import {
   UserCheck,
   Play,
   Ban,
-  MessageCircle,
 } from "lucide-react";
 import { format, addDays, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -379,26 +378,10 @@ export default function CalendarPage() {
               </Card>
 
               <div className="space-y-3">
-                {createdApt.whatsapp_link && (
-                  <a
-                    href={createdApt.whatsapp_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full block"
-                  >
-                    <Button className="w-full bg-[#25D366] hover:bg-[#1DA851] text-white font-bold gap-2">
-                      <MessageCircle className="h-5 w-5" />
-                      Enviar confirmacao para o cliente
-                    </Button>
-                  </a>
-                )}
                 <Button variant="outline" className="w-full" onClick={() => setCreatedApt(null)}>
                   Fechar
                 </Button>
               </div>
-              <p className="text-xs text-center text-muted-foreground">
-                Toque para enviar o resumo do agendamento para o cliente via WhatsApp.
-              </p>
             </div>
           )}
         </DialogContent>

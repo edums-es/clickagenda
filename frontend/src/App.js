@@ -1,35 +1,28 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Toaster } from "@/components/ui/sonner";
 
 import Landing from "@/pages/Landing";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
-import Pricing from "@/pages/Pricing";
-import AuthCallback from "@/pages/AuthCallback";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import Pricing from "@/pages/Pricing";
 import Dashboard from "@/pages/Dashboard";
 import CalendarPage from "@/pages/CalendarPage";
 import Clients from "@/pages/Clients";
 import Services from "@/pages/Services";
 import Settings from "@/pages/Settings";
-import Marketplace from "@/pages/Marketplace";
-import QuickLinks from "@/pages/QuickLinks";
-import QuickLinkPage from "@/pages/QuickLinkPage";
-import TurboOffers from "@/pages/TurboOffers";
-import ClientDashboard from "@/pages/ClientDashboard";
-import ClientAppointments from "@/pages/ClientAppointments";
-import ClientFavorites from "@/pages/ClientFavorites";
-import ClientConfig from "@/pages/ClientConfig";
 import PublicProfile from "@/pages/PublicProfile";
-import WhatsappIA from "@/pages/WhatsappIA";
 import BookingFlow from "@/pages/BookingFlow";
 import AppointmentManage from "@/pages/AppointmentManage";
-import ClientReview from "@/pages/ClientReview";
+import Billing from "@/pages/Billing";
+import SuperAdmin from "@/pages/SuperAdmin";
+import AdminIntegrations from "@/pages/AdminIntegrations";
+import AdminMarketing from "@/pages/AdminMarketing";
+import AdminSecurity from "@/pages/AdminSecurity";
 import DashboardLayout from "@/components/DashboardLayout";
-import ClientLayout from "@/components/ClientLayout";
 
 function ProtectedRoute({ children, roles }) {
   const { user, loading } = useAuth();
@@ -45,34 +38,28 @@ function ProtectedRoute({ children, roles }) {
   }
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(user.role)) {
-    return <Navigate to={user.role === "client" ? "/cliente" : "/dashboard"} replace />;
+    return <Navigate to={user.role === "superadmin" ? "/superadmin" : "/dashboard"} replace />;
   }
   return children;
 }
 
 function AppRouter() {
-  const location = useLocation();
-
-  // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-  // Detect session_id during render (NOT in useEffect) to prevent race conditions
-  if (location.hash?.includes("session_id=")) {
-    return <AuthCallback />;
-  }
-
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/planos" element={<Pricing />} />
       <Route path="/esqueci-senha" element={<ForgotPassword />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />
+      <Route path="/planos" element={<Pricing />} />
       <Route path="/p/:slug" element={<PublicProfile />} />
       <Route path="/p/:slug/agendar" element={<BookingFlow />} />
       <Route path="/agendamento/:token" element={<AppointmentManage />} />
-      <Route path="/avaliar/:id" element={<ClientReview />} />
-      <Route path="/marketplace" element={<Marketplace />} />
-      <Route path="/ql/:code" element={<QuickLinkPage />} />
+      <Route path="/billing" element={<ProtectedRoute roles={["professional"]}><DashboardLayout><Billing /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/superadmin" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><SuperAdmin /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/superadmin/integracoes" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><AdminIntegrations /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/superadmin/marketing" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><AdminMarketing /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/superadmin/seguranca" element={<ProtectedRoute roles={["superadmin"]}><DashboardLayout><AdminSecurity /></DashboardLayout></ProtectedRoute>} />
       <Route
         path="/dashboard"
         element={
@@ -106,66 +93,10 @@ function AppRouter() {
         }
       />
       <Route
-        path="/links-rapidos"
-        element={
-          <ProtectedRoute roles={["professional"]}>
-            <DashboardLayout><QuickLinks /></DashboardLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/turbo"
-        element={
-          <ProtectedRoute roles={["professional"]}>
-            <DashboardLayout><TurboOffers /></DashboardLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/configuracoes"
         element={
           <ProtectedRoute roles={["professional"]}>
             <DashboardLayout><Settings /></DashboardLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/whatsapp"
-        element={
-          <ProtectedRoute roles={["professional"]}>
-            <DashboardLayout><WhatsappIA /></DashboardLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/cliente"
-        element={
-          <ProtectedRoute roles={["client"]}>
-            <ClientLayout><ClientDashboard /></ClientLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/cliente/agendamentos"
-        element={
-          <ProtectedRoute roles={["client"]}>
-            <ClientLayout><ClientAppointments /></ClientLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/cliente/favoritos"
-        element={
-          <ProtectedRoute roles={["client"]}>
-            <ClientLayout><ClientFavorites /></ClientLayout>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/cliente/config"
-        element={
-          <ProtectedRoute roles={["client"]}>
-            <ClientLayout><ClientConfig /></ClientLayout>
           </ProtectedRoute>
         }
       />

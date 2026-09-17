@@ -1,16 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { CalendarDays, MessageSquare, User, Mail, Lock, Phone, Briefcase, ArrowLeft } from "lucide-react";
+import { CalendarDays, User, Mail, Lock, Phone, Briefcase, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Register() {
-  const { register, updateUser } = useAuth();
+  const { register } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ 
     name: "", 
@@ -25,73 +23,23 @@ export default function Register() {
 
   const handleChange = (e) => setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
 
-  useEffect(() => {
-    const raw = localStorage.getItem("pending_client_register");
-    if (!raw) return;
-    try {
-      const pending = JSON.parse(raw);
-      setForm((p) => ({
-        ...p,
-        name: pending.name || p.name,
-        email: pending.email || p.email,
-        phone: pending.phone || p.phone,
-        role: "client",
-      }));
-    } catch {
-      return;
-    }
-  }, []);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (form.password.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
+    if (form.password.length < 10 || !/[a-zA-Z]/.test(form.password) || !/\d/.test(form.password)) {
+      toast.error("Use ao menos 10 caracteres, com letras e números");
       return;
     }
     setLoading(true);
     try {
       const data = await register(form);
       
-      // Original logic for pending client registration
-      const raw = localStorage.getItem("pending_client_register");
-      let profilePayload = {};
-      
-      if (raw) {
-        try {
-          const pending = JSON.parse(raw);
-          if (pending.phone) profilePayload.phone = pending.phone;
-          if (pending.name && !data?.user?.name) profilePayload.name = pending.name;
-        } catch (e) {
-          console.error("Error parsing pending register", e);
-        }
-      }
-
-      // Add new fields to payload if they are filled and not already in pending
-      if (form.phone && !profilePayload.phone) profilePayload.phone = form.phone;
-      if (form.custom_link) profilePayload.slug = form.custom_link;
-      
-      if (Object.keys(profilePayload).length > 0) {
-        try {
-          const profileRes = await api.put("/profile", profilePayload);
-          updateUser(profileRes.data);
-        } catch (err) {
-          console.error("Failed to update profile details", err);
-        }
-      }
-
-      localStorage.removeItem("pending_client_register");
       toast.success("Conta criada com sucesso!");
-      navigate(data?.user?.role === "client" ? "/cliente" : "/dashboard");
+      navigate("/dashboard");
     } catch (err) {
       toast.error(err.response?.data?.detail || "Erro ao criar conta");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleGoogleLogin = () => {
-    const redirectUrl = window.location.origin + "/auth/callback";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
 
   return (
@@ -124,31 +72,6 @@ export default function Register() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Account Type Selection - RESTORED */}
-            <div className="space-y-3 pt-2">
-              <Label className="text-sm font-bold text-gray-700 ml-1">Tipo de conta</Label>
-              <RadioGroup
-                value={form.role}
-                onValueChange={(value) => setForm((p) => ({ ...p, role: value }))}
-                className="grid grid-cols-2 gap-3"
-              >
-                <label className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition-all ${form.role === 'professional' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-100 bg-gray-50/50 hover:bg-gray-50'}`}>
-                  <RadioGroupItem value="professional" id="role-professional" className="sr-only" />
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${form.role === 'professional' ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
-                    {form.role === 'professional' && <div className="w-2 h-2 rounded-full bg-white" />}
-                  </div>
-                  <span className={`text-sm font-bold ${form.role === 'professional' ? 'text-gray-900' : 'text-gray-500'}`}>Profissional</span>
-                </label>
-                <label className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition-all ${form.role === 'client' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-100 bg-gray-50/50 hover:bg-gray-50'}`}>
-                  <RadioGroupItem value="client" id="role-client" className="sr-only" />
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${form.role === 'client' ? 'border-primary bg-primary' : 'border-gray-300 bg-white'}`}>
-                    {form.role === 'client' && <div className="w-2 h-2 rounded-full bg-white" />}
-                  </div>
-                  <span className={`text-sm font-bold ${form.role === 'client' ? 'text-gray-900' : 'text-gray-500'}`}>Cliente</span>
-                </label>
-              </RadioGroup>
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="name" className="text-sm font-bold text-gray-700 ml-1">Nome completo</Label>
               <div className="relative">
@@ -166,9 +89,7 @@ export default function Register() {
               </div>
             </div>
 
-            {/* Business Name - RESTORED */}
-            {form.role === "professional" && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                 <Label htmlFor="business_name" className="text-sm font-bold text-gray-700 ml-1">Nome do negócio (opcional)</Label>
                 <div className="relative">
                   <Briefcase className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
@@ -182,8 +103,7 @@ export default function Register() {
                     className="h-14 rounded-2xl border-gray-100 bg-gray-50/50 pl-14 pr-6 text-gray-900 focus:bg-white focus:ring-primary/20 transition-all text-base"
                   />
                 </div>
-              </div>
-            )}
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-bold text-gray-700 ml-1">Email</Label>
@@ -204,7 +124,7 @@ export default function Register() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phone" className="text-sm font-bold text-gray-700 ml-1">WhatsApp (com DDD)</Label>
+              <Label htmlFor="phone" className="text-sm font-bold text-gray-700 ml-1">Telefone (com DDD)</Label>
               <div className="relative">
                 <Phone className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
                 <Input
@@ -223,7 +143,7 @@ export default function Register() {
               <Label htmlFor="custom_link" className="text-sm font-bold text-gray-700 ml-1">Seu link personalizado</Label>
               <div className="flex items-stretch gap-0 bg-gray-50/50 rounded-2xl border border-gray-100 focus-within:ring-primary/20 transition-all overflow-hidden">
                 <div className="bg-gray-100 border-r border-gray-100 px-5 flex items-center text-xs font-bold text-gray-400">
-                  salaozap.com/
+                  clickagenda.com/
                 </div>
                 <Input
                   id="custom_link"
@@ -245,13 +165,15 @@ export default function Register() {
                   id="password"
                   name="password"
                   type="password"
-                  placeholder="Minimo 6 caracteres"
+                  minLength={10}
+                  placeholder="10+ caracteres, letras e números"
                   value={form.password}
                   onChange={handleChange}
                   required
                   data-testid="register-password-input"
                   className="h-14 rounded-2xl border-gray-100 bg-gray-50/50 pl-14 pr-6 text-gray-900 focus:bg-white focus:ring-primary/20 transition-all text-base"
                 />
+                <p className="text-[10px] text-gray-400 font-medium ml-1">Use 10 ou mais caracteres, incluindo letras e números.</p>
               </div>
             </div>
 
@@ -265,38 +187,6 @@ export default function Register() {
             </Button>
           </form>
 
-          <div className="relative my-10">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-100" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase tracking-[0.2em] font-black text-gray-400">
-              <span className="bg-white px-4">OU USE SUA REDE</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Button
-              variant="outline"
-              className="h-14 rounded-2xl border-gray-100 bg-white hover:bg-gray-50 font-bold flex gap-3 shadow-sm hover:shadow-md transition-all active:scale-95 text-gray-700"
-              onClick={handleGoogleLogin}
-              data-testid="google-register-btn"
-            >
-              <svg className="h-5 w-5" viewBox="0 0 24 24">
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-              </svg>
-              Google
-            </Button>
-            <Button
-              variant="outline"
-              className="h-14 rounded-2xl border-gray-100 bg-white hover:bg-gray-50 font-bold flex gap-3 shadow-sm hover:shadow-md transition-all active:scale-95 text-gray-700"
-            >
-              <MessageSquare className="w-5 h-5 text-[#25D366] fill-[#25D366]" />
-              WhatsApp
-            </Button>
-          </div>
         </div>
 
         <div className="mt-10 text-center">
