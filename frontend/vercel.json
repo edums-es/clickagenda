@@ -1,10 +1,6 @@
 {
-  "build": {
-    "env": {
-      "REACT_APP_BACKEND_URL": "https://clickagenda-production.up.railway.app"
-    }
-  },
-  "env": {
-    "REACT_APP_BACKEND_URL": "https://clickagenda-production.up.railway.app"
-  }
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://clickagenda-production.up.railway.app/api/:path*" },
+    { "source": "/((?!api/|static/).*)", "destination": "/index.html" }
+  ]
 }

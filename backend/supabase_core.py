@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Res
 from pydantic import BaseModel, Field, field_validator, model_validator
 from supabase import create_client as create_supabase_client
 from integration_vault import delete_credentials, load_credentials, masked, provider_values, save_credentials
+from booking_rules import brazil_mobile, whatsapp_url
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -54,6 +55,11 @@ class Register(BaseModel):
     custom_link: str = ""
     phone: str = ""
     role: str = "professional"
+
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, value):
+        return brazil_mobile(value) if value else ""
 
     @field_validator("password")
     @classmethod
@@ -125,13 +131,21 @@ class IntegrationCredentials(BaseModel):
 
 
 class Service(BaseModel):
-    name: str
-    description: str = ""
-    duration_minutes: int = 60
-    price: float = 0
-    buffer_minutes: int = 15
+    name: str = Field(min_length=2, max_length=120)
+    description: str = Field(default="", max_length=2000)
+    image_url: str = Field(default="", max_length=2048)
+    duration_minutes: int = Field(default=60, ge=5, le=720)
+    price: float = Field(default=0, ge=0, le=100000, allow_inf_nan=False)
+    buffer_minutes: int = Field(default=15, ge=0, le=180)
     category: str = ""
     active: bool = True
+
+    @field_validator("image_url")
+    @classmethod
+    def own_image(cls, value):
+        if value and not value.startswith(f"{SUPABASE_URL}/storage/v1/object/public/{PROFILE_MEDIA_BUCKET}/"):
+            raise ValueError("Envie a foto pelo botão de upload do serviço")
+        return value
 
 
 class Client(BaseModel):
@@ -141,6 +155,11 @@ class Client(BaseModel):
     notes: str = ""
     tags: list[str] = []
 
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, value):
+        return brazil_mobile(value) if value else ""
+
 
 class Availability(BaseModel):
     rules: list[dict] = []
@@ -149,12 +168,40 @@ class Availability(BaseModel):
 
 class Appointment(BaseModel):
     service_id: str
-    client_name: str
+    client_name: str = Field(min_length=2, max_length=100)
     client_phone: str
     client_email: str = ""
-    date: str
-    start_time: str
-    notes: str = ""
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    start_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    notes: str = Field(default="", max_length=2000)
+    booking_request_id: uuid.UUID | None = None
+
+    @field_validator("client_phone")
+    @classmethod
+    def valid_phone(cls, value):
+        return brazil_mobile(value)
+
+    @field_validator("client_name")
+    @classmethod
+    def valid_name(cls, value):
+        value = " ".join(value.split())
+        if len(value) < 2 or not any(c.isalpha() for c in value):
+            raise ValueError("Informe seu nome")
+        return value
+
+    @field_validator("date")
+    @classmethod
+    def valid_day(cls, value):
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+
+    @field_validator("client_email")
+    @classmethod
+    def valid_email(cls, value):
+        value = value.strip()
+        if value and (len(value) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value)):
+            raise ValueError("Informe um e-mail válido ou deixe em branco")
+        return value
 
 
 class Profile(BaseModel):
@@ -174,6 +221,11 @@ class Profile(BaseModel):
     city: str | None = None
     state: str | None = None
     onboarding_completed: bool | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, value):
+        return brazil_mobile(value) if value else value
 
 
 def legacy_profile(row):
@@ -255,7 +307,7 @@ def healthcheck():
 
 @router.post("/profile/upload")
 async def upload_profile_image(
-    image_type: str = Query(..., pattern="^(picture|cover_picture)$"),
+    image_type: str = Query(..., pattern="^(picture|cover_picture|service)$"),
     file: UploadFile = File(...),
     profile: dict = Depends(current_user),
 ):
@@ -263,9 +315,17 @@ async def upload_profile_image(
     allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
     if file.content_type not in allowed_types:
         raise HTTPException(400, "Envie uma imagem JPG, PNG, WEBP ou GIF")
-    content = await file.read()
+    content = await file.read(4 * 1024 * 1024 + 1)
     if not content or len(content) > 4 * 1024 * 1024:
         raise HTTPException(400, "A imagem deve ter no máximo 4 MB")
+    signatures = {
+        "image/jpeg": content.startswith(b"\xff\xd8\xff"),
+        "image/png": content.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/gif": content.startswith((b"GIF87a", b"GIF89a")),
+        "image/webp": content.startswith(b"RIFF") and content[8:12] == b"WEBP",
+    }
+    if not signatures.get(file.content_type):
+        raise HTTPException(400, "O arquivo não é uma imagem válida nesse formato")
 
     try:
         supabase.storage.get_bucket(PROFILE_MEDIA_BUCKET)
@@ -426,13 +486,13 @@ def services(user=Depends(current_user)):
 @router.post("/services")
 def create_service(data: Service, user=Depends(current_user)):
     legacy_id = "svc_" + secrets.token_hex(4)
-    row = supabase.table("services").insert({"professional_id": user["id"], "legacy_service_id": legacy_id, "name": data.name, "description": data.description, "duration_minutes": data.duration_minutes, "buffer_minutes": data.buffer_minutes, "price_cents": round(data.price * 100), "category": data.category, "active": data.active}).execute().data[0]
+    row = supabase.table("services").insert({"professional_id": user["id"], "legacy_service_id": legacy_id, "name": data.name.strip(), "description": data.description, "image_url": data.image_url, "duration_minutes": data.duration_minutes, "buffer_minutes": data.buffer_minutes, "price_cents": round(data.price * 100), "category": data.category, "active": data.active}).execute().data[0]
     return service_out(row)
 
 
 @router.put("/services/{service_id}")
 def update_service(service_id: str, data: Service, user=Depends(current_user)):
-    row = supabase.table("services").update({"name": data.name, "description": data.description, "duration_minutes": data.duration_minutes, "buffer_minutes": data.buffer_minutes, "price_cents": round(data.price * 100), "category": data.category, "active": data.active}).eq("professional_id", user["id"]).eq("legacy_service_id", service_id).execute().data
+    row = supabase.table("services").update({"name": data.name.strip(), "description": data.description, "image_url": data.image_url, "duration_minutes": data.duration_minutes, "buffer_minutes": data.buffer_minutes, "price_cents": round(data.price * 100), "category": data.category, "active": data.active}).eq("professional_id", user["id"]).eq("legacy_service_id", service_id).execute().data
     if not row: raise HTTPException(404, "Servico nao encontrado")
     return service_out(row[0])
 
@@ -549,13 +609,8 @@ def public_profile(slug: str):
 
 @router.get("/public/{slug}/client-lookup")
 def public_client_lookup(slug: str, phone: str = Query(..., min_length=8)):
-    """Reconhece clientes do profissional sem expor dados sensíveis."""
-    profile = public_profile(slug)
-    phone_norm = normalize_phone(phone)
-    if len(phone_norm) < 10:
-        return {"recognized": False}
-    rows = supabase.table("clients").select("name").eq("professional_id", profile["id"]).eq("phone_norm", phone_norm).limit(1).execute().data
-    return {"recognized": bool(rows), "name": rows[0]["name"] if rows else None}
+    # Knowing a number is not proof of ownership. Never disclose client names.
+    return {"recognized": False}
 
 
 @router.get("/public/{slug}")
@@ -563,6 +618,8 @@ def get_public_profile(slug: str):
     profile = public_profile(slug)
     services_rows = supabase.table("services").select("*").eq("professional_id", profile["id"]).eq("active", True).execute().data
     professional = legacy_profile(profile)
+    for private_field in ("email", "role", "plan", "onboarding_completed"):
+        professional.pop(private_field, None)
     featured_ids = profile.get("featured_service_ids") or []
     featured_rows = [service for service_id in featured_ids for service in services_rows if service["legacy_service_id"] == service_id]
     remaining_rows = [service for service in services_rows if service["legacy_service_id"] not in featured_ids]
@@ -594,23 +651,80 @@ def public_slots(slug: str, date: str, service_id: str):
 @router.post("/public/{slug}/book")
 def public_book(slug: str, data: Appointment):
     profile = public_profile(slug)
+    previous = retry_booking(profile, data)
+    if previous:
+        return booking_confirmation(previous, profile)
     enforce_plan_limit(profile)
     service = supabase.table("services").select("*").eq("professional_id", profile["id"]).eq("legacy_service_id", data.service_id).eq("active", True).single().execute().data
     zone = ZoneInfo(profile.get("timezone") or "America/Sao_Paulo")
     start = datetime.fromisoformat(f"{data.date}T{data.start_time}").replace(tzinfo=zone)
     if start <= datetime.now(zone) + timedelta(hours=profile.get("min_advance_hours", 0)):
         raise HTTPException(400, "Este horário não está mais disponível")
+    if data.start_time not in {slot["start_time"] for slot in public_slots(slug, data.date, data.service_id)["slots"]}:
+        raise HTTPException(409, "Este horário não está disponível. Escolha outro.")
     phone = normalize_phone(data.client_phone)
     existing = supabase.table("clients").select("id").eq("professional_id", profile["id"]).eq("phone_norm", phone).execute().data
     client_id = existing[0]["id"] if existing else supabase.table("clients").insert({"professional_id": profile["id"], "legacy_client_id": "cli_" + secrets.token_hex(4), "name": data.client_name, "phone": data.client_phone, "phone_norm": phone, "email": data.client_email}).execute().data[0]["id"]
     appointment_id, token = "apt_" + secrets.token_hex(4), secrets.token_urlsafe(32)
     end = start + timedelta(minutes=service["duration_minutes"])
     try:
-        rows = supabase.table("appointments").insert({"professional_id": profile["id"], "service_id": service["id"], "client_id": client_id, "legacy_appointment_id": appointment_id, "client_name": data.client_name, "client_phone": data.client_phone, "client_email": data.client_email, "notes": data.notes, "start_at": start.isoformat(), "end_at": end.isoformat(), "buffer_minutes": service["buffer_minutes"], "blocked_until": (end + timedelta(minutes=service["buffer_minutes"])).isoformat(), "appointment_date": data.date, "start_time": data.start_time, "end_time": end.strftime("%H:%M"), "service_name": service["name"], "service_price": service["price_cents"], "token": token}).execute().data
+        rows = supabase.table("appointments").insert({"professional_id": profile["id"], "service_id": service["id"], "client_id": client_id, "legacy_appointment_id": appointment_id, "client_name": data.client_name, "client_phone": data.client_phone, "client_email": data.client_email, "notes": data.notes, "start_at": start.isoformat(), "end_at": end.isoformat(), "buffer_minutes": service["buffer_minutes"], "blocked_until": (end + timedelta(minutes=service["buffer_minutes"])).isoformat(), "appointment_date": data.date, "start_time": data.start_time, "end_time": end.strftime("%H:%M"), "service_name": service["name"], "service_price": service["price_cents"], "token": token, "booking_request_id": str(data.booking_request_id) if data.booking_request_id else None}).execute().data
     except Exception as exc:
-        raise HTTPException(409, "Este horário já foi reservado. Escolha outro.") from exc
+        previous = retry_booking(profile, data)
+        if previous:
+            return booking_confirmation(previous, profile)
+        if getattr(exc, "code", None) in {"23P01", "23505"}:
+            raise HTTPException(409, "Este horário já foi reservado. Escolha outro.") from exc
+        logger.exception("Falha ao gravar reserva pública")
+        raise HTTPException(503, "Não foi possível salvar a reserva. Tente novamente.") from exc
     rows[0]["legacy_service_id"] = data.service_id
-    return appointment_out(rows[0])
+    return booking_confirmation(rows[0], profile)
+
+
+def retry_booking(profile, data):
+    if not data.booking_request_id:
+        return None
+    rows = supabase.table("appointments").select("*, services(legacy_service_id)").eq("professional_id", profile["id"]).eq("booking_request_id", str(data.booking_request_id)).execute().data
+    if not rows:
+        return None
+    row = rows[0]
+    row["legacy_service_id"] = (row.pop("services", {}) or {}).get("legacy_service_id")
+    if (row["client_phone"] != data.client_phone or row["client_name"] != data.client_name or
+        str(row["appointment_date"]) != data.date or str(row["start_time"])[:5] != data.start_time or
+        row["legacy_service_id"] != data.service_id):
+        raise HTTPException(409, "Esta tentativa já foi concluída com outros dados. Atualize a página.")
+    return row
+
+
+def booking_confirmation(row, profile):
+    result = appointment_out(row)
+    display_date = datetime.strptime(result["date"], "%Y-%m-%d").strftime("%d/%m/%Y")
+    business = profile.get("business_name") or profile.get("full_name") or "profissional"
+    message = (f"Olá, {business}! Sou {row['client_name']}. Agendei pelo ClickAgenda:\n"
+               f"Serviço: {row['service_name']}\nData: {display_date}\n"
+               f"Horário: {result['start_time']}\nCódigo: {result['appointment_id']}\n"
+               "Podemos conversar sobre meu atendimento?")
+    result["whatsapp_url"] = whatsapp_url(profile.get("phone") or "", message)
+    result["professional_name"] = business
+    return result
+
+
+@router.get("/notifications")
+def notifications(user=Depends(current_user)):
+    rows = supabase.table("booking_notifications").select("*").eq("professional_id", user["id"]).order("created_at", desc=True).limit(50).execute().data
+    unread = supabase.table("booking_notifications").select("id", count="exact", head=True).eq("professional_id", user["id"]).is_("read_at", "null").execute().count
+    return {"items": rows, "unread_count": unread or 0}
+
+
+class ReadNotifications(BaseModel):
+    ids: list[uuid.UUID] = Field(max_length=50)
+
+
+@router.post("/notifications/read")
+def read_notifications(data: ReadNotifications, user=Depends(current_user)):
+    if data.ids:
+        supabase.table("booking_notifications").update({"read_at": datetime.now(timezone.utc).isoformat()}).eq("professional_id", user["id"]).in_("id", [str(id) for id in data.ids]).is_("read_at", "null").execute()
+    return {"message": "Notificações lidas"}
 
 
 @router.get("/appointment/manage/{token}")

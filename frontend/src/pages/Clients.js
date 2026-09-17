@@ -33,7 +33,8 @@ export default function Clients() {
 
   useEffect(() => {
     const t = setTimeout(loadClients, 300);
-    return () => clearTimeout(t);
+    window.addEventListener('clickagenda:appointments-changed', loadClients);
+    return () => { clearTimeout(t); window.removeEventListener('clickagenda:appointments-changed', loadClients); };
   }, [loadClients]);
 
   const openNew = () => {

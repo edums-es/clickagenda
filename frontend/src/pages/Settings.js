@@ -11,8 +11,9 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Clock, Globe, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
+import { normalizeMobile, formatPhone } from '@/lib/booking';
 
-const dayNames = ["Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado", "Domingo"];
+const dayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 export default function Settings() {
   const { user, updateUser } = useAuth();
@@ -87,6 +88,7 @@ export default function Settings() {
   };
 
   const saveProfile = async () => {
+    if (profile.phone && !normalizeMobile(profile.phone)) return toast.error('Informe um WhatsApp válido com DDD para receber seus clientes.');
     setSaving(true);
     try {
       const cleanSocialLinks = Object.entries(profile.social_links || {}).reduce((acc, [key, value]) => {
@@ -291,7 +293,8 @@ export default function Settings() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Telefone</Label>
-                  <Input value={profile.phone} onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))} placeholder="(11) 99999-9999" data-testid="settings-phone" />
+                  <Input type="tel" inputMode="tel" value={formatPhone(profile.phone)} onChange={(e) => setProfile((p) => ({ ...p, phone: formatPhone(e.target.value) }))} placeholder="WhatsApp com DDD" data-testid="settings-phone" />
+                  <p className="text-xs text-muted-foreground">Os clientes serão direcionados a este WhatsApp depois de reservar. Confira seu número.</p>
                 </div>
                 <div className="space-y-2">
                   <Label>Tipo de negocio</Label>

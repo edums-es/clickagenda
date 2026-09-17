@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,7 @@ const statusLabels = {
 };
 
 import OnboardingWizard from "@/components/OnboardingWizard";
+import { displayDate } from '@/lib/booking';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -50,8 +51,6 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
-  const [newAppointments, setNewAppointments] = useState(0);
   const todayDate = new Date();
   const monthStartDate = new Date(todayDate.getFullYear(), todayDate.getMonth(), 1);
   const initialStart = format(monthStartDate, "yyyy-MM-dd");
@@ -60,54 +59,7 @@ export default function Dashboard() {
   const [startDate, setStartDate] = useState(initialStart);
   const [endDate, setEndDate] = useState(initialEnd);
   
-  const lastCountRef = useRef(null);
-  const audioContextRef = useRef(null);
-
   const initials = user?.name ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() : "?";
-
-  const unlockSound = useCallback(async () => {
-    try {
-      const ctx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
-      audioContextRef.current = ctx;
-      if (ctx.state === "suspended") {
-        await ctx.resume();
-      }
-      setSoundEnabled(true);
-      return true;
-    } catch {}
-    return false;
-  }, []);
-
-  const playNotificationSound = useCallback(() => {
-    if (!soundEnabled) return;
-    try {
-      const audioCtx = audioContextRef.current || new (window.AudioContext || window.webkitAudioContext)();
-      audioContextRef.current = audioCtx;
-      if (audioCtx.state === "suspended") return;
-
-      const osc1 = audioCtx.createOscillator();
-      const gain1 = audioCtx.createGain();
-      osc1.connect(gain1);
-      gain1.connect(audioCtx.destination);
-      osc1.frequency.value = 520;
-      gain1.gain.setValueAtTime(0.3, audioCtx.currentTime);
-      gain1.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-      osc1.start(audioCtx.currentTime);
-      osc1.stop(audioCtx.currentTime + 0.3);
-
-      const osc2 = audioCtx.createOscillator();
-      const gain2 = audioCtx.createGain();
-      osc2.connect(gain2);
-      gain2.connect(audioCtx.destination);
-      osc2.frequency.value = 780;
-      gain2.gain.setValueAtTime(0.3, audioCtx.currentTime + 0.35);
-      gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.65);
-      osc2.start(audioCtx.currentTime + 0.35);
-      osc2.stop(audioCtx.currentTime + 0.65);
-    } catch (e) {
-      console.log('Audio nao disponivel:', e);
-    }
-  }, [soundEnabled]);
 
   const loadStats = useCallback(async (start, end, options = {}) => {
     const { silent = false } = options;
@@ -127,51 +79,16 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
-
-    const checkNewAppointments = async () => {
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const res = await api.get(`/appointments?date=${today}&status=scheduled`);
-        const currentCount = res.data.length;
-
-        if (lastCountRef.current === null) {
-          lastCountRef.current = currentCount;
-          return;
-        }
-
-        if (currentCount > lastCountRef.current) {
-          const newCount = currentCount - lastCountRef.current;
-          setNewAppointments(prev => prev + newCount);
-          playNotificationSound();
-          toast.success(
-            `🗓️ ${newCount === 1 ? 'Novo agendamento!' : `${newCount} novos agendamentos!`}`,
-            { description: 'Um cliente acabou de agendar.', duration: 6000 }
-          );
-          loadStats(appliedRange.start, appliedRange.end, { silent: true });
-        }
-        lastCountRef.current = currentCount;
-      } catch (err) {}
-    };
-
-    checkNewAppointments();
-    const interval = setInterval(checkNewAppointments, 30000);
-    return () => clearInterval(interval);
-  }, [user, playNotificationSound, loadStats, appliedRange]);
+    const refresh = () => loadStats(appliedRange.start, appliedRange.end, { silent: true });
+    window.addEventListener('clickagenda:appointments-changed', refresh);
+    return () => window.removeEventListener('clickagenda:appointments-changed', refresh);
+  }, [loadStats, appliedRange]);
 
   useEffect(() => {
     loadStats(appliedRange.start, appliedRange.end);
   }, [appliedRange, loadStats]);
 
-  useEffect(() => {
-    const handler = () => { unlockSound(); };
-    window.addEventListener("click", handler, { once: true });
-    window.addEventListener("keydown", handler, { once: true });
-    return () => {
-      window.removeEventListener("click", handler);
-      window.removeEventListener("keydown", handler);
-    };
-  }, [unlockSound]);
+
 
   const applyRange = (start, end) => {
     setStartDate(start);
@@ -348,7 +265,11 @@ export default function Dashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-0 flex-1 bg-white">
-               <div className="overflow-x-auto h-full">
+               <div className="divide-y sm:hidden">
+                 {!stats?.recent_appointments?.length && <p className="p-6 text-sm text-muted-foreground">Nenhum agendamento neste período.</p>}
+                 {stats?.recent_appointments?.map(apt => <Link key={apt.appointment_id} to={'/agenda?date=' + apt.date} className="flex min-w-0 items-center gap-3 p-4"><div className="min-w-0 flex-1"><strong className="block break-words text-sm">{apt.client_name}</strong><p className="mt-1 break-words text-xs text-muted-foreground">{apt.service_name}</p><p className="mt-2 text-xs">{displayDate(apt.date)} · {apt.start_time}</p><Badge variant="outline" className="mt-2">{statusLabels[apt.status] || apt.status}</Badge></div><ArrowRight className="h-5 w-5 shrink-0 text-primary" /></Link>)}
+               </div>
+               <div className="hidden sm:block overflow-x-auto h-full">
                  <table className="w-full text-sm text-left">
                    <thead className="text-[10px] text-[#64748B] font-black tracking-widest uppercase bg-neutral-50/50 border-b border-border/30">
                      <tr>
@@ -377,7 +298,7 @@ export default function Dashboard() {
                          else if (apt.status === "cancelled" || apt.status === "no_show") badgeClasses = "bg-red-50 text-red-600";
                          
                          return (
-                           <tr key={apt._id} className="hover:bg-neutral-50/70 transition-colors bg-white">
+                           <tr key={apt.appointment_id} className="hover:bg-neutral-50/70 transition-colors bg-white">
                              <td className="px-6 py-4">
                                <div className="flex items-center gap-3">
                                  <Avatar className="h-[34px] w-[34px]">

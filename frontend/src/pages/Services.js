@@ -25,6 +25,23 @@ export default function Services() {
     active: true,
   });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const uploadPhoto = async (file) => {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 4 * 1024 * 1024) {
+      toast.error('Escolha JPG, PNG, WebP ou GIF de até 4 MB.');
+      return;
+    }
+    setUploading(true);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const { data } = await api.post('/profile/upload?image_type=service', body, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setForm(previous => ({ ...previous, image_url: data.url }));
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Não foi possível enviar a foto. Tente novamente.');
+    } finally { setUploading(false); }
+  };
 
   const loadServices = async () => {
     try {
@@ -43,7 +60,7 @@ export default function Services() {
 
   const openNew = () => {
     setEditing(null);
-    setForm({ name: "", description: "", duration_minutes: 60, price: 0, buffer_minutes: 15, category: "", active: true });
+    setForm({ name: "", description: "", image_url: "", duration_minutes: 60, price: 0, buffer_minutes: 15, category: "", active: true });
     setShowDialog(true);
   };
 
@@ -52,9 +69,10 @@ export default function Services() {
     setForm({
       name: s.name,
       description: s.description || "",
+      image_url: s.image_url || "",
       duration_minutes: s.duration_minutes,
       price: s.price,
-      buffer_minutes: s.buffer_minutes || 15,
+      buffer_minutes: s.buffer_minutes ?? 15,
       category: s.category || "",
       active: s.active !== false,
     });
@@ -62,13 +80,18 @@ export default function Services() {
   };
 
   const handleSave = async () => {
-    if (!form.name) {
+    if (saving || uploading) return;
+    if (form.name.trim().length < 2) {
       toast.error("Nome do servico e obrigatorio");
       return;
     }
     setSaving(true);
     try {
-      const payload = { ...form, price: parseFloat(form.price) || 0, duration_minutes: parseInt(form.duration_minutes) || 60, buffer_minutes: parseInt(form.buffer_minutes) || 0 };
+      const payload = { ...form, name: form.name.trim(), price: Number(form.price), duration_minutes: Number(form.duration_minutes), buffer_minutes: Number(form.buffer_minutes) };
+      if (!Number.isFinite(payload.price) || payload.price < 0 || !Number.isInteger(payload.duration_minutes) || payload.duration_minutes < 5 || payload.duration_minutes > 720 || !Number.isInteger(payload.buffer_minutes) || payload.buffer_minutes < 0 || payload.buffer_minutes > 180) {
+        toast.error('Confira o preço, a duração (5–720 min) e o intervalo (0–180 min).');
+        return;
+      }
       if (editing) {
         await api.put(`/services/${editing.service_id}`, payload);
         toast.success("Servico atualizado!");
@@ -182,15 +205,16 @@ export default function Services() {
               data-testid={`service-card-${i}`}
             >
               <CardContent className="pt-5 pb-4">
+                {s.image_url && <img src={s.image_url} alt={s.name} loading="lazy" className="h-40 w-full rounded-xl object-cover mb-4" />}
                 <div className="flex items-start justify-between mb-3">
                   <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
                     <Scissors className="h-4 w-4 text-primary" />
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(s)} data-testid={`edit-service-${i}`}>
+                    <Button aria-label={`Editar ${s.name}`} variant="ghost" size="icon" className="h-11 w-11" onClick={() => openEdit(s)} data-testid={`edit-service-${i}`}>
                       <Edit2 className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(s.service_id)} data-testid={`delete-service-${i}`}>
+                    <Button aria-label={`Excluir ${s.name}`} variant="ghost" size="icon" className="h-11 w-11 text-destructive" onClick={() => handleDelete(s.service_id)} data-testid={`delete-service-${i}`}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -217,7 +241,7 @@ export default function Services() {
       )}
 
       {/* Service Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+      <Dialog open={showDialog} onOpenChange={value => { if (!saving && !uploading) setShowDialog(value); }}>
         <DialogContent className="sm:max-w-md" data-testid="service-dialog">
           <DialogHeader>
             <DialogTitle className="font-heading">
@@ -225,6 +249,12 @@ export default function Services() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="service-photo">Foto do serviço</Label>
+              {form.image_url && <div className="space-y-2"><img src={form.image_url} alt="Prévia do serviço" className="w-full h-36 object-cover rounded-xl" /><Button variant="outline" onClick={() => setForm(p => ({ ...p, image_url: '' }))}>Remover foto</Button></div>}
+              <Input id="service-photo" type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={uploading || saving} onChange={event => { uploadPhoto(event.target.files?.[0]); event.target.value = ''; }} />
+              <p className="text-xs text-muted-foreground" role="status">{uploading ? 'Enviando foto…' : 'Até 4 MB. A foto aparecerá no seu catálogo público.'}</p>
+            </div>
             <div className="space-y-2">
               <Label>Nome *</Label>
               <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Corte de cabelo" data-testid="service-form-name" />
@@ -255,7 +285,7 @@ export default function Services() {
               <Label>Ativo</Label>
               <Switch checked={form.active} onCheckedChange={(v) => setForm((p) => ({ ...p, active: v }))} data-testid="service-form-active" />
             </div>
-            <Button onClick={handleSave} disabled={saving} data-testid="save-service-btn" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+            <Button onClick={handleSave} disabled={saving || uploading} data-testid="save-service-btn" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
               {saving ? "Salvando..." : editing ? "Salvar alteracoes" : "Criar servico"}
             </Button>
           </div>

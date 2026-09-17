@@ -20,13 +20,13 @@ export default function OnboardingWizard({ open, onComplete }) {
 
   // Step 2: Availability
   const [availability, setAvailability] = useState([
-    { day: 0, active: true, start: "09:00", end: "18:00", label: "Segunda" },
-    { day: 1, active: true, start: "09:00", end: "18:00", label: "Terca" },
-    { day: 2, active: true, start: "09:00", end: "18:00", label: "Quarta" },
-    { day: 3, active: true, start: "09:00", end: "18:00", label: "Quinta" },
-    { day: 4, active: true, start: "09:00", end: "18:00", label: "Sexta" },
-    { day: 5, active: false, start: "09:00", end: "13:00", label: "Sabado" },
-    { day: 6, active: false, start: "09:00", end: "13:00", label: "Domingo" },
+    { day: 1, active: true, start: "09:00", end: "18:00", label: "Segunda" },
+    { day: 2, active: true, start: "09:00", end: "18:00", label: "Terca" },
+    { day: 3, active: true, start: "09:00", end: "18:00", label: "Quarta" },
+    { day: 4, active: true, start: "09:00", end: "18:00", label: "Quinta" },
+    { day: 5, active: true, start: "09:00", end: "18:00", label: "Sexta" },
+    { day: 6, active: false, start: "09:00", end: "13:00", label: "Sabado" },
+    { day: 0, active: false, start: "09:00", end: "13:00", label: "Domingo" },
   ]);
 
   const handleCreateService = async () => {

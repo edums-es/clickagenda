@@ -25,6 +25,8 @@ import {
 import { format, addDays, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { useSearchParams } from 'react-router-dom';
+import { normalizeMobile, formatPhone, whatsappLink } from '@/lib/booking';
 
 const statusLabels = {
   scheduled: "Agendado",
@@ -45,9 +47,8 @@ const statusActions = [
   { status: "no_show", label: "Faltou", icon: Ban },
 ];
 
-const HOURS = Array.from({ length: 14 }, (_, i) => i + 7); // 7am to 8pm
-
 export default function CalendarPage() {
+  const [params] = useSearchParams();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [appointments, setAppointments] = useState([]);
   const [services, setServices] = useState([]);
@@ -84,7 +85,17 @@ export default function CalendarPage() {
 
   useEffect(() => {
     loadData();
+    window.addEventListener('clickagenda:appointments-changed', loadData);
+    return () => window.removeEventListener('clickagenda:appointments-changed', loadData);
   }, [loadData]);
+
+  useEffect(() => {
+    const value = params.get('date');
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const date = new Date(value + 'T12:00:00');
+      if (!Number.isNaN(date.getTime())) setSelectedDate(date);
+    }
+  }, [params]);
 
   const updateStatus = async (aptId, status) => {
     try {
@@ -97,13 +108,16 @@ export default function CalendarPage() {
   };
 
   const handleCreate = async () => {
+    if (creating) return;
     if (!newApt.service_id || !newApt.client_name || !newApt.client_phone || !newApt.start_time) {
       toast.error("Preencha todos os campos obrigatorios");
       return;
     }
+    const phone = normalizeMobile(newApt.client_phone);
+    if (!phone) return toast.error('Informe um celular válido com DDD.');
     setCreating(true);
     try {
-      const res = await api.post("/appointments", { ...newApt, date: dateStr });
+      const res = await api.post("/appointments", { ...newApt, client_phone: phone, date: dateStr });
       toast.success("Agendamento criado!");
       setCreatedApt(res.data);
       setShowNewDialog(false);
@@ -122,6 +136,11 @@ export default function CalendarPage() {
       return aptHour === hour && apt.status !== "cancelled";
     });
   };
+  // Never hide early/late appointments outside the default visible day.
+  const bookedHours = appointments.map(apt => Number(apt.start_time.slice(0, 2))).filter(Number.isFinite);
+  const firstHour = Math.min(7, ...bookedHours);
+  const lastHour = Math.max(20, ...bookedHours);
+  const HOURS = Array.from({ length: lastHour - firstHour + 1 }, (_, index) => index + firstHour);
 
   return (
     <div className="space-y-6" data-testid="calendar-page">
@@ -207,7 +226,7 @@ export default function CalendarPage() {
                       <div className="w-14 text-xs text-muted-foreground pt-2 text-right shrink-0">
                         {`${hour.toString().padStart(2, "0")}:00`}
                       </div>
-                      <div className="flex-1 border-t border-border pt-1 pb-1 relative">
+                      <div className="flex-1 min-w-0 border-t border-border pt-1 pb-1 relative">
                         {hourApts.length === 0 ? (
                           <div className="h-10 rounded-lg border border-dashed border-transparent group-hover:border-border transition-colors" />
                         ) : (
@@ -216,6 +235,9 @@ export default function CalendarPage() {
                               <Popover key={apt.appointment_id}>
                                 <PopoverTrigger asChild>
                                   <div
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } }}
                                     className={`time-slot border-l-primary cursor-pointer bg-primary/5`}
                                     data-testid={`apt-${apt.appointment_id}`}
                                   >
@@ -236,6 +258,9 @@ export default function CalendarPage() {
                                   </div>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-56 p-2" align="end">
+                                  <p className="px-2 pt-2 text-sm font-semibold break-words">{apt.client_name}</p>
+                                  {apt.notes && <p className="p-2 text-xs text-muted-foreground break-words">{apt.notes}</p>}
+                                  {whatsappLink(apt.client_phone) && <a href={whatsappLink(apt.client_phone, `Olá, ${apt.client_name}! Vamos falar sobre seu agendamento de ${apt.service_name}?`)} target="_blank" rel="noopener noreferrer" className="my-2 flex min-h-11 items-center rounded-lg bg-emerald-50 px-2 text-sm font-semibold text-emerald-800">Conversar no WhatsApp</a>}
                                   <p className="text-xs font-medium mb-2 px-2">Alterar status</p>
                                   <div className="space-y-0.5">
                                     {statusActions.map((sa) => (
@@ -304,7 +329,9 @@ export default function CalendarPage() {
                 <Label>Telefone *</Label>
                 <Input
                   value={newApt.client_phone}
-                  onChange={(e) => setNewApt((p) => ({ ...p, client_phone: e.target.value }))}
+                  type="tel"
+                  inputMode="tel"
+                  onChange={(e) => setNewApt((p) => ({ ...p, client_phone: formatPhone(e.target.value) }))}
                   placeholder="(11) 99999-9999"
                   data-testid="new-apt-client-phone"
                 />

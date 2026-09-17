@@ -2,7 +2,9 @@ import axios from "axios";
 import { toast } from "sonner";
 
 const defaultBackendUrl = `${window.location.protocol}//${window.location.hostname}:8000`;
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || defaultBackendUrl;
+// Production uses the Vercel proxy: the HttpOnly session remains first-party,
+// including on Safari and browsers blocking third-party cookies.
+const BACKEND_URL = process.env.NODE_ENV === 'production' ? window.location.origin : (process.env.REACT_APP_BACKEND_URL || defaultBackendUrl);
 
 const api = axios.create({
   baseURL: `${BACKEND_URL}/api`,
@@ -17,6 +19,7 @@ let isNetworkErrorShowing = false;
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.code === 'ERR_CANCELED' || error.config?.silent) return Promise.reject(error);
     // Erro de rede / timeout (sem response)
     if (!error.response) {
       if (!isNetworkErrorShowing) {
@@ -28,6 +31,10 @@ api.interceptors.response.use(
     }
 
     const status = error.response?.status;
+    // FastAPI returns field errors as an array; keep all form toasts readable.
+    if (status === 422 && Array.isArray(error.response.data?.detail)) {
+      error.response.data.detail = error.response.data.detail.map((item) => item.msg?.replace(/^Value error, /, '')).filter(Boolean).join('. ');
+    }
 
     if (status === 401) {
       const path = window.location.pathname;
