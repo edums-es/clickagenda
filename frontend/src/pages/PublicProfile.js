@@ -397,7 +397,7 @@ export default function PublicProfile() {
 
   // BOOKING VIEW
   return (
-    <div className="min-h-screen bg-[#f1f8f5] pb-40 font-sans" data-testid="public-profile-page">
+    <div className="min-h-screen bg-[#f1f8f5] pb-44 font-sans" data-testid="public-profile-page">
       <div className="pointer-events-none fixed inset-x-0 top-0 h-[430px] bg-[radial-gradient(circle_at_50%_0%,rgba(20,184,143,0.18),transparent_62%)]" />
       <div className="relative mx-auto max-w-xl px-4 pt-7 sm:px-5 sm:pt-10">
         <section className="overflow-hidden rounded-[34px] bg-white shadow-[0_24px_70px_rgba(26,78,63,0.16)] ring-1 ring-[#dcefe8]">
@@ -569,7 +569,7 @@ export default function PublicProfile() {
 
       {/* Sticky Bottom Actions */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 border-t border-[#dce9e4] bg-white/95 shadow-[0_-15px_40px_rgba(23,52,47,0.10)] p-4 backdrop-blur-xl md:p-5 transition-transform duration-300 z-50 ${
+        className={`fixed bottom-0 left-0 right-0 border-t border-[#dce9e4] bg-white/95 shadow-[0_-15px_40px_rgba(23,52,47,0.10)] mobile-safe-bottom p-4 backdrop-blur-xl md:p-5 transition-transform duration-300 z-50 ${
           selectedSlot ? "translate-y-0" : "translate-y-full"
         }`}
       >

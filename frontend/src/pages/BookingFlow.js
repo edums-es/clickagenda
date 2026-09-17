@@ -272,7 +272,7 @@ export default function BookingFlow() {
 
   // BOOKING VIEW
   return (
-    <div className="min-h-screen bg-neutral-50 pb-40 font-sans" data-testid="booking-flow-page">
+    <div className="min-h-screen bg-neutral-50 pb-44 font-sans" data-testid="booking-flow-page">
       {/* Header */}
       <div className="bg-white border-b border-border/50 sticky top-0 z-40 px-4 py-3 flex items-center justify-between shadow-sm">
         <Link to="/" className="flex items-center gap-2">
@@ -487,7 +487,7 @@ export default function BookingFlow() {
 
       {/* Sticky Bottom Actions */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 bg-white border-t border-border/50 shadow-[0_-15px_40px_rgba(0,0,0,0.05)] p-4 md:p-6 transition-transform duration-300 z-50 ${
+        className={`fixed bottom-0 left-0 right-0 bg-white border-t border-border/50 shadow-[0_-15px_40px_rgba(0,0,0,0.05)] mobile-safe-bottom p-4 md:p-6 transition-transform duration-300 z-50 ${
           selectedSlot ? "translate-y-0" : "translate-y-full"
         }`}
       >
