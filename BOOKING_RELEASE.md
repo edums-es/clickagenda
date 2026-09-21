@@ -1,4 +1,14 @@
-# Booking experience — release status (2026-09-17)
+# Booking experience — release status (2026-09-21)
+
+## Deployment preparation completed September 21
+
+- Railway CLI authorized and linked to the existing ClickAgenda service.
+- Production Supabase and vault variables set without exposing secrets.
+- Billing/admin schema applied; restored database lacked `set_updated_at`, now repaired in migration 0002.
+- Copied the 2 missing accounts preserving bcrypt password hashes, 1 service, 2 clients and 3 bookings. The professional's `/p/paulo` link and booking tokens were preserved. A client-only accented internal slug received an ASCII identifier.
+- Audit confirms zero missing legacy account emails, services, clients or appointments. Old source remains untouched; encrypted full snapshots are in the private `platform-secrets/migration-backups` prefix. Sessions must be renewed by signing in again.
+- Migration utilities require `pymongo` only when run by an operator; the deployed API does not import it or depend on MongoDB.
+- Publication and live validation follow below; historical blockers are retained for traceability.
 
 ## Implemented
 

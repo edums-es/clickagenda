@@ -1,6 +1,15 @@
 -- Comercial, pagamentos e governança do ClickAgenda.
 -- Aplicar depois da 0001 no SQL Editor/CLI do Supabase.
 
+-- Restored installations can have the tables but lack this helper.
+create or replace function public.set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
 alter table public.profiles drop constraint if exists profiles_role_check;
 alter table public.profiles add constraint profiles_role_check
   check (role in ('professional', 'client', 'superadmin'));

@@ -103,4 +103,4 @@ app.include_router(supabase_router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "database": "supabase", "environment": APP_ENV}
+    return {"status": "ok", "database": "supabase", "environment": APP_ENV, "revision": os.getenv("RAILWAY_GIT_COMMIT_SHA", "local")}
