@@ -37,8 +37,8 @@ export default function DashboardLayout({ children }) {
 
       {/* Main content */}
       <main className="flex-1 min-w-0 md:ml-64 pt-[5rem] md:pt-0">
+        {professional && <div className="notification-anchor fixed right-4 top-3 z-50 md:static md:flex md:justify-end md:max-w-7xl md:mx-auto md:px-8 md:pt-6"><NotificationCenter /></div>}
         <div className="dashboard-content p-4 md:p-8 max-w-7xl mx-auto animate-fade-in">
-          {professional && <div className="notification-anchor fixed right-4 top-3 z-50 md:static md:flex md:justify-end md:mb-4"><NotificationCenter /></div>}
           {children}
         </div>
       </main>

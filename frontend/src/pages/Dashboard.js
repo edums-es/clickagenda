@@ -91,11 +91,14 @@ export default function Dashboard() {
 
 
   const applyRange = (start, end) => {
+    if (!start || !end || start > end) {
+      toast.error("Escolha um período válido: a data final deve ser igual ou posterior à inicial.");
+      return;
+    }
     setStartDate(start);
     setEndDate(end);
     setAppliedRange({ start, end });
     setFilterOpen(false);
-    setNewAppointments(0);
   };
 
   if (loading) {
@@ -118,18 +121,11 @@ export default function Dashboard() {
       {/* Top Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-black font-heading text-foreground tracking-tight">Dashboard Overview</h1>
+          <h1 className="text-2xl md:text-3xl font-black font-heading text-foreground tracking-tight">Sua agenda em resumo</h1>
           <p className="text-sm text-muted-foreground font-medium mt-1">Bem-vindo de volta, {(user?.name || "").split(" ")[0]}</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative hidden md:block">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar agendamentos..." 
-              className="pl-10 mr-2 w-64 bg-white border-border/60 rounded-full h-[42px] font-medium text-sm hover:border-border focus:border-[#00D49D] shadow-sm transition-all" 
-            />
-          </div>
           
           {user?.slug && (
             <Button variant="outline" className="rounded-full h-[42px] font-bold border-border/60 bg-white text-foreground hover:bg-neutral-50 shadow-sm transition-all" onClick={() => {
@@ -337,7 +333,7 @@ export default function Dashboard() {
           <Card className="shadow-sm border-border/50 rounded-2xl flex-1 flex flex-col">
             <CardHeader className="pb-4 pt-5 px-5 border-b border-border/30 bg-white rounded-t-2xl">
               <div className="flex items-center justify-between">
-                <CardTitle className="font-heading text-[17px] font-black tracking-tight">Proximos Clientes</CardTitle>
+                <CardTitle className="font-heading text-[17px] font-black tracking-tight">Próximos clientes</CardTitle>
                 <Link to="/agenda" className="text-[12px] font-bold text-[#00D49D] hover:underline">Ver todos</Link>
               </div>
             </CardHeader>
@@ -349,20 +345,20 @@ export default function Dashboard() {
                      <p className="text-[13px] font-medium text-[#64748B]">Sua agenda futura esta livre no momento.</p>
                   </div>
                 ) : (
-                  stats.upcoming_clients.map((apt, i) => {
+                  stats.upcoming_clients.map((apt) => {
                     const aptInitials = apt.client_name.split(" ").map(n=>n[0]).join("").slice(0,2).toUpperCase();
                     return (
-                      <div key={apt._id} className="flex items-center justify-between p-5 hover:bg-neutral-50/70 transition-colors">
-                        <div className="flex items-center gap-3.5">
+                      <Link key={apt.appointment_id} to={'/agenda?date=' + apt.date} className="flex min-w-0 items-center justify-between p-5 hover:bg-neutral-50/70 transition-colors">
+                        <div className="flex min-w-0 items-center gap-3.5">
                            <Avatar className="h-[42px] w-[42px]">
                              <AvatarFallback className="bg-primary/5 text-primary text-[12px] font-bold">{aptInitials}</AvatarFallback>
                            </Avatar>
-                           <div>
+                           <div className="min-w-0 break-words">
                              <p className="font-bold text-[14px] leading-snug text-foreground">{apt.client_name}</p>
-                             <p className="text-[12px] text-[#64748B] font-semibold mt-0.5">{apt.date} as {apt.start_time} • {apt.service_name}</p>
+                             <p className="text-[12px] text-[#64748B] font-semibold mt-0.5">{displayDate(apt.date)} às {apt.start_time} • {apt.service_name}</p>
                            </div>
                         </div>
-                      </div>
+                      </Link>
                     )
                   })
                 )}
@@ -378,7 +374,7 @@ export default function Dashboard() {
                 </p>
                 <div className="flex items-center justify-between bg-white border border-[#00D49D]/20 rounded-xl px-3.5 py-2.5 shadow-sm">
                   <p className="font-bold text-[13px] text-foreground truncate">
-                    agendazap.com/{user.slug}
+                    {window.location.host}/p/{user.slug}
                   </p>
                   <Button variant="ghost" size="icon" className="h-[28px] w-[28px] rounded-lg text-[#00D49D] hover:bg-[#00D49D]/10 shrink-0 ml-2" onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/p/${user.slug}`);

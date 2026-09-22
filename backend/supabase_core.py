@@ -8,7 +8,7 @@ import hmac
 import json
 import re
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from supabase import create_client as create_supabase_client
 from integration_vault import delete_credentials, load_credentials, masked, provider_values, save_credentials
 from booking_rules import brazil_mobile, whatsapp_url
+from dashboard_rules import dashboard_metrics
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -465,16 +466,18 @@ def update_profile(data: Profile, user=Depends(current_user)):
 
 
 @router.get("/dashboard/stats")
-def dashboard_stats(user=Depends(current_user)):
+def dashboard_stats(start_date: date | None = None, end_date: date | None = None, user=Depends(current_user)):
     zone = ZoneInfo(user.get("timezone") or "America/Sao_Paulo")
-    today = datetime.now(zone).date().isoformat()
+    now = datetime.now(zone)
+    start = start_date or now.date().replace(day=1)
+    end = end_date or now.date()
+    if start > end:
+        raise HTTPException(422, "A data inicial deve ser igual ou anterior à data final")
     rows = supabase.table("appointments").select("*").eq("professional_id", user["id"]).execute().data
-    active = [row for row in rows if row["status"] not in ("cancelled", "no_show")]
-    today_rows = [row for row in active if str(row.get("appointment_date")) == today]
-    completed = [row for row in active if row["status"] == "completed"]
-    month = today[:7]
-    revenue = sum(row.get("service_price", 0) / 100 for row in completed if str(row.get("appointment_date", "")).startswith(month))
-    return {"appointments_today": len(today_rows), "total_appointments": len(active), "monthly_revenue": round(revenue, 2), "pending_confirmations": len([row for row in active if row["status"] == "scheduled"]), "recent_appointments": [appointment_out({**row, "legacy_service_id": None}) for row in sorted(active, key=lambda row: str(row.get("start_at")), reverse=True)[:5]]}
+    metrics = dashboard_metrics(rows, now, start, end)
+    for key in ('recent_appointments', 'upcoming_clients'):
+        metrics[key] = [appointment_out({**row, "legacy_service_id": None}) for row in metrics[key]]
+    return metrics
 
 
 @router.get("/services")

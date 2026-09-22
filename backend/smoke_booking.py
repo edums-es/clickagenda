@@ -8,6 +8,7 @@ import base64
 import logging
 import secrets
 import uuid
+import httpx
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -16,24 +17,37 @@ import server
 import supabase_core as core
 
 
-def run():
+def run(base_url=None, pause_for_ui=False):
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('httpcore').setLevel(logging.WARNING)
     fixture_id = None
     object_path = None
     slug = 'qa-booking-' + secrets.token_hex(6)
-    api = TestClient(server.app)
+    def client():
+        return httpx.Client(base_url=base_url, timeout=30) if base_url else TestClient(server.app)
+    api = client()
     def check(response, expected=200):
         if response.status_code != expected:
             raise AssertionError(f'{response.request.method} {response.request.url.path}: {response.status_code} {response.text[:200]}')
         return response.json()
     try:
-        password = secrets.token_urlsafe(32)
-        auth = core.supabase.auth.admin.create_user({'email':slug + '@example.invalid', 'password':password, 'email_confirm':True, 'user_metadata':{'full_name':'QA temporário', 'slug':slug}})
-        fixture_id = str(auth.user.id)
+        password = secrets.token_urlsafe(32) + 'A9'
+        registration = api.post('/api/auth/register', json={'name':'QA temporário', 'slug':slug,
+            'email':slug + '@example.invalid', 'password':password, 'role':'superadmin'})
+        account = check(registration)['user']
+        fixture_id = account['user_id']
+        assert account['role'] == 'professional', 'Public registration must not grant admin privileges'
+        assert check(api.get('/api/auth/me'))['user_id'] == fixture_id
+        if base_url:
+            cookie = registration.headers.get('set-cookie', '').lower()
+            assert 'httponly' in cookie and 'secure' in cookie and 'samesite=lax' in cookie
+        check(api.post('/api/auth/logout'))
+        check(api.get('/api/auth/me'), 401)
         profile = core.supabase.table('profiles').update({'phone':'5511984567231', 'onboarding_completed':True}).eq('id', fixture_id).execute().data[0]
         check(api.post('/api/auth/login', json={'email':slug + '@example.invalid', 'password':password}))
         assert check(api.get('/api/auth/me'))['user_id'] == fixture_id
+        check(api.get('/api/admin/overview'), 403)
+        check(api.get('/api/admin/integrations'), 403)
         png = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=')
         image = check(api.post('/api/profile/upload?image_type=service', files={'file':('test.png', png, 'image/png')}))
         object_path = image['url'].split('/profile-media/')[1].split('?')[0]
@@ -66,13 +80,30 @@ def run():
         refreshed = check(api.get(f'/api/public/{slug}/slots', params={'date':str(day), 'service_id':service['service_id']}))['slots']
         assert refreshed[0]['start_time'] == '09:00'
         def race(_):
-            with TestClient(server.app) as concurrent_api:
+            with client() as concurrent_api:
                 return concurrent_api.post('/api/public/' + slug + '/book', json={**payload, 'booking_request_id':str(uuid.uuid4())}).status_code
         with ThreadPoolExecutor(max_workers=2) as pool:
             assert sorted(pool.map(race, range(2))) == [200, 409]
-        print('PASS: real Supabase login/session, upload, catalog, availability, validation, booking, retry, concurrent conflict, clients, notifications, read state and cancellation.')
+        stats = check(api.get('/api/dashboard/stats', params={'start_date':str(day), 'end_date':str(day)}))
+        assert len(stats['recent_appointments']) == len(stats['upcoming_clients']) == 1
+        assert stats['upcoming_clients'][0]['service_name'] == 'QA Corte'
+        assert not check(api.get('/api/dashboard/stats', params={'start_date':'2000-01-01', 'end_date':'2000-01-02'}))['recent_appointments']
+        check(api.get('/api/dashboard/stats', params={'start_date':'2099-01-01', 'end_date':'2000-01-01'}), 422)
+        print('PASS: registration, privilege restriction, login/session/logout, upload, catalog, availability, validation, booking, retry, concurrent conflict, clients, notifications, cancellation and dashboard metrics.')
+        if pause_for_ui:
+            print(f'Disposable UI fixture: {slug}@example.invalid\nPassword: {password}\nPublic slug: {slug}', flush=True)
+            input('Press Enter after browser checks to remove this fixture: ')
     finally:
+        api.close()
         server.app.dependency_overrides.clear()
+        if not fixture_id:
+            # A registration failure may occur after Auth created the account.
+            # Only reconcile this unpredictable, test-owned email/slug pair.
+            rows = core.supabase.table('profiles').select('id').eq('slug', slug).execute().data
+            if rows:
+                candidate = core.supabase.auth.admin.get_user_by_id(rows[0]['id']).user
+                if candidate.email == slug + '@example.invalid':
+                    fixture_id = str(candidate.id)
         if object_path:
             assert object_path.startswith(fixture_id + '/')
             core.supabase.storage.from_('profile-media').remove([object_path])
@@ -84,6 +115,11 @@ def run():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--allow-test-fixture', action='store_true')
-    if not parser.parse_args().allow_test_fixture:
+    parser.add_argument('--base-url', help='Test the deployed API through its public frontend origin')
+    parser.add_argument('--pause-for-ui', action='store_true', help='Keep the disposable fixture until interactive browser checks finish')
+    args = parser.parse_args()
+    if not args.allow_test_fixture:
         parser.error('Explicit --allow-test-fixture is required')
-    run()
+    if args.base_url and args.base_url != 'https://clickagenda-iota.vercel.app':
+        parser.error('Remote fixtures are restricted to the authorized production origin')
+    run(args.base_url, args.pause_for_ui)
