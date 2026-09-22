@@ -261,15 +261,15 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="mb-6" data-testid="settings-tabs">
-          <TabsTrigger value="profile" data-testid="tab-profile">
-            <User className="h-4 w-4 mr-2" /> Perfil
+        <TabsList className="mb-6 grid h-auto w-full grid-cols-3 sm:inline-flex sm:w-auto" data-testid="settings-tabs">
+          <TabsTrigger value="profile" className="min-h-11 min-w-0 px-1 text-xs sm:px-3 sm:text-sm" data-testid="tab-profile">
+            <User className="hidden sm:block h-4 w-4 mr-2" /> Perfil
           </TabsTrigger>
-          <TabsTrigger value="availability" data-testid="tab-availability">
-            <Clock className="h-4 w-4 mr-2" /> Horarios
+          <TabsTrigger value="availability" className="min-h-11 min-w-0 px-1 text-xs sm:px-3 sm:text-sm" data-testid="tab-availability">
+            <Clock className="hidden sm:block h-4 w-4 mr-2" /> Horários
           </TabsTrigger>
-          <TabsTrigger value="public-page" data-testid="tab-public">
-            <Globe className="h-4 w-4 mr-2" /> Pagina publica
+          <TabsTrigger value="public-page" className="min-h-11 min-w-0 whitespace-normal px-1 text-xs sm:px-3 sm:text-sm" data-testid="tab-public">
+            <Globe className="hidden sm:block h-4 w-4 mr-2" /> Página pública
           </TabsTrigger>
         </TabsList>
 
@@ -385,10 +385,10 @@ export default function Settings() {
                         <Switch checked={isActive} onCheckedChange={() => toggleDay(i)} data-testid={`toggle-day-${i}`} />
                       </div>
                       {isActive && rule ? (
-                        <div className="flex items-center gap-2">
-                          <Input type="time" value={rule.start_time} onChange={(e) => updateRuleTime(i, "start_time", e.target.value)} className="w-28" data-testid={`start-time-${i}`} />
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+                          <Input type="time" aria-label={`Início de ${day}`} value={rule.start_time} onChange={(e) => updateRuleTime(i, "start_time", e.target.value)} className="min-w-0 w-full sm:w-28" data-testid={`start-time-${i}`} />
                           <span className="text-xs text-muted-foreground">ate</span>
-                          <Input type="time" value={rule.end_time} onChange={(e) => updateRuleTime(i, "end_time", e.target.value)} className="w-28" data-testid={`end-time-${i}`} />
+                          <Input type="time" aria-label={`Fim de ${day}`} value={rule.end_time} onChange={(e) => updateRuleTime(i, "end_time", e.target.value)} className="min-w-0 w-full sm:w-28" data-testid={`end-time-${i}`} />
                         </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">Sem atendimento</p>
@@ -413,7 +413,7 @@ export default function Settings() {
                   <div className="space-y-2">
                     <Label>Seu link exclusivo</Label>
                     <div className="flex gap-2">
-                      <Input value={profile.slug} onChange={(e) => setProfile((p) => ({ ...p, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))} data-testid="settings-slug" className="flex-1" />
+                      <Input value={profile.slug} onChange={(e) => setProfile((p) => ({ ...p, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))} data-testid="settings-slug" className="min-w-0 flex-1" />
                       <Button variant="outline" onClick={copyLink} disabled={!publicUrl} data-testid="copy-link-btn">
                         {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                       </Button>
@@ -475,15 +475,15 @@ export default function Settings() {
               <CardContent className="grid md:grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <Label>Foto de perfil</Label>
-                  <div className="flex items-center gap-4">
-                    <div className="h-20 w-20 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4 min-w-0">
+                    <div className="h-20 w-20 shrink-0 rounded-full overflow-hidden bg-muted flex items-center justify-center">
                       {profile.picture ? (
                         <img src={profile.picture} alt="Foto de perfil" className="h-full w-full object-cover" />
                       ) : (
                         <span className="text-xs text-muted-foreground">Sem foto</span>
                       )}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 min-w-0 w-full">
                       <Input type="file" accept="image/*" onChange={(e) => handleImageUpload("picture", e.target.files?.[0])} disabled={uploading.picture} />
                       {profile.picture && (
                         <Button variant="outline" size="sm" onClick={() => setProfile((p) => ({ ...p, picture: "" }))}>

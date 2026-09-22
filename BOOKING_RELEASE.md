@@ -10,6 +10,14 @@
 - The smoke test now accepts `--base-url https://clickagenda-iota.vercel.app` and additionally covers registration, logout, HttpOnly/Secure cookies, privilege restriction and dashboard metrics. `--pause-for-ui` holds a disposable fixture for browser checks and removes it when Enter is pressed.
 - Offline regression suite: 12 backend and 11 frontend cases passing; production frontend build successful.
 
+## End-to-end production verification — September 22
+
+- Main `5090f49` deployed successfully on Railway (`eed8ade7-bfb7-4dd9-82ac-8fc90783940b`) and its frontend changes were visibly present on the Vercel production domain.
+- Expanded HTTP smoke passed against production, including registration/session/logout, secure first-party cookies, denied admin access, upload, booking conflicts, notifications and dashboard range/upcoming metrics.
+- Real browser test rejected the repeated phone, saved a disposable booking, and navigated to WhatsApp with the expected professional number and encoded booking details. The user explicitly approved opening this test link. No message was sent. Returning to the app preserved the receipt.
+- Professional notification listed that same browser-created booking; opening it navigated to the correct appointment day. Bell is now visible in the mobile header. Upcoming clients include both test bookings.
+- At 320px, dashboard, service editor and appointment calendar had no page-wide horizontal overflow. The same check exposed settings tabs, time fields and upload layout needing further shrinking; this follow-up adjusts those elements instead of hiding overflow globally.
+
 ## Deployment preparation completed September 21
 
 - Railway CLI authorized and linked to the existing ClickAgenda service.
